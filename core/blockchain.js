@@ -2,6 +2,8 @@ import Block from './block.js';
 import Transaction from './transaction.js';
 import StakeManager from './stake.js';
 import ProofOfStake from './pos.js';
+import RewardSystem from './rewards.js';
+import SlashingSystem from './slashing.js';
 
 class Blockchain {
   constructor(config, db) {
@@ -11,8 +13,10 @@ class Blockchain {
     this.mempool = [];
     this.balances = new Map();
     this.publicKeys = new Map();
-    this.stakeManager = new StakeManager();
+    this.stakeManager = new StakeManager(config);
     this.pos = new ProofOfStake(this.stakeManager);
+    this.rewardSystem = new RewardSystem(config);
+    this.slashingSystem = new SlashingSystem(config);
   }
 
   async initialize() {
@@ -49,13 +53,16 @@ class Blockchain {
     this.balances.set(this.config.genesisValidator, this.config.initialSupply);
     
     // Add initial stake for genesis validator
-    this.stakeManager.addStake(this.config.genesisValidator, this.config.minStake * 10);
+    this.stakeManager.addValidator(
+      this.config.genesisValidator,
+      this.config.minimumStake * 10
+    );
   }
 
   async rebuildState() {
     this.balances.clear();
     this.publicKeys.clear();
-    this.stakeManager = new StakeManager();
+    this.stakeManager = new StakeManager(this.config);
     this.pos = new ProofOfStake(this.stakeManager);
 
     for (const block of this.chain) {
@@ -64,11 +71,14 @@ class Blockchain {
       }
     }
     
-    // Re-add genesis stake if this is the first block
+    // Re-add genesis stake
     if (this.chain.length > 0) {
       const genesisBalance = this.balances.get(this.config.genesisValidator);
-      if (genesisBalance >= this.config.minStake * 10) {
-        this.stakeManager.addStake(this.config.genesisValidator, this.config.minStake * 10);
+      if (genesisBalance >= this.config.minimumStake * 10) {
+        this.stakeManager.addValidator(
+          this.config.genesisValidator,
+          this.config.minimumStake * 10
+        );
       }
     }
   }
@@ -91,18 +101,20 @@ class Blockchain {
   }
 
   addTransaction(tx, publicKey) {
+    // Store public key first
+    this.publicKeys.set(tx.from, publicKey);
+    
     if (!tx.isValid((addr) => this.publicKeys.get(addr))) {
       throw new Error('Invalid transaction signature');
     }
-
+  
     if (tx.from !== 'system') {
       const balance = this.getBalance(tx.from);
       if (balance < tx.amount) {
         throw new Error('Insufficient balance');
       }
     }
-
-    this.publicKeys.set(tx.from, publicKey);
+  
     this.mempool.push(tx);
   }
 
@@ -113,13 +125,25 @@ class Blockchain {
       throw new Error('Insufficient balance for staking');
     }
 
-    if (amount < this.config.minStake) {
-      throw new Error(`Minimum stake is ${this.config.minStake} SAYM`);
-    }
-
     this.publicKeys.set(address, publicKey);
-    this.stakeManager.addStake(address, amount);
+    const validator = this.stakeManager.addValidator(address, amount);
     this.balances.set(address, balance - amount);
+
+    return validator;
+  }
+
+  unstake(address) {
+    const currentBlock = this.chain.length;
+    const unlockBlock = this.stakeManager.initiateUnstake(address, currentBlock);
+    return unlockBlock;
+  }
+
+  withdrawStake(address) {
+    const currentBlock = this.chain.length;
+    const amount = this.stakeManager.withdrawStake(address, currentBlock);
+    const balance = this.getBalance(address);
+    this.balances.set(address, balance + amount);
+    return amount;
   }
 
   async createBlock() {
@@ -148,8 +172,27 @@ class Blockchain {
 
     this.chain.push(block);
 
+    // Apply transactions
     for (const tx of transactions) {
       this.applyTransaction(tx);
+    }
+
+    // Reward validator
+    const validatorObj = this.stakeManager.getValidator(validator);
+    if (validatorObj) {
+      const reward = this.rewardSystem.distributeReward(validatorObj, block.index);
+      const balance = this.getBalance(validator);
+      this.balances.set(validator, balance + reward);
+      this.pos.recordBlockCreation(validator);
+    }
+
+    // Check for slashing
+    const slashResults = this.slashingSystem.checkAndSlashInactiveValidators(
+      this.stakeManager.getAllValidators()
+    );
+
+    if (slashResults.length > 0) {
+      console.log(`⚠ Slashed ${slashResults.length} validator(s)`);
     }
 
     await this.saveChain();
@@ -185,7 +228,11 @@ class Blockchain {
   }
 
   getValidators() {
-    return this.stakeManager.getValidators();
+    return this.stakeManager.getActiveValidators().map(v => v.toJSON());
+  }
+
+  getAllValidators() {
+    return this.stakeManager.getAllValidators().map(v => v.toJSON());
   }
 
   getMempoolSize() {
@@ -206,6 +253,19 @@ class Blockchain {
 
     this.mempool.push(faucetTx);
     return faucetTx;
+  }
+
+  getStats() {
+    return {
+      blocks: this.chain.length,
+      validators: this.stakeManager.getActiveValidators().length,
+      totalValidators: this.stakeManager.getAllValidators().length,
+      totalStake: this.stakeManager.getTotalStake(),
+      mempool: this.mempool.length,
+      totalRewards: this.rewardSystem.getTotalRewardsDistributed(
+        this.stakeManager.getAllValidators()
+      )
+    };
   }
 }
 

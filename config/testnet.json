@@ -1,11 +1,17 @@
 {
-    "network": "testnet",
-    "port": 3001,
-    "initialSupply": 10000000,
-    "blockTime": 30000,
-    "minStake": 10,
-    "genesisValidator": "genesis",
-    "faucetEnabled": true,
-    "faucetAmount": 100,
-    "autoMine": false
-  }
+  "network": "testnet",
+  "port": 3001,
+  "p2pPort": 6002,
+  "peers": [],
+  "initialSupply": 10000000,
+  "blockTime": 5000,
+  "blockReward": 10,
+  "minimumStake": 10,
+  "unstakeDelay": 10,
+  "slashPercentage": 0.05,
+  "maxMissedBlocks": 3,
+  "genesisValidator": "genesis",
+  "faucetEnabled": true,
+  "faucetAmount": 100,
+  "autoMine": false
+}

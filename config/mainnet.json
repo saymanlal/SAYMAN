@@ -1,9 +1,16 @@
 {
-    "network": "mainnet",
-    "port": 3000,
-    "initialSupply": 1000000,
-    "blockTime": 10000,
-    "minStake": 100,
-    "genesisValidator": "genesis",
-    "faucetEnabled": false
-  }
+  "network": "mainnet",
+  "port": 3000,
+  "p2pPort": 6001,
+  "peers": [],
+  "initialSupply": 1000000,
+  "blockTime": 10000,
+  "blockReward": 5,
+  "minimumStake": 100,
+  "unstakeDelay": 50,
+  "slashPercentage": 0.05,
+  "maxMissedBlocks": 5,
+  "genesisValidator": "genesis",
+  "faucetEnabled": false,
+  "autoMine": true
+}

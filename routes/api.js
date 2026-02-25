@@ -2,7 +2,7 @@ import express from 'express';
 import Transaction from '../core/transaction.js';
 import Wallet from '../core/wallet.js';
 
-function createRouter(blockchain) {
+function createRouter(blockchain, p2pServer = null) {
   const router = express.Router();
 
   router.get('/chain', (req, res) => {
@@ -14,12 +14,20 @@ function createRouter(blockchain) {
     });
   });
 
+  router.get('/stats', (req, res) => {
+    res.json(blockchain.getStats());
+  });
+
   router.get('/balance/:address', (req, res) => {
     const { address } = req.params;
     const balance = blockchain.getBalance(address);
+    const validator = blockchain.stakeManager.getValidator(address);
+    
     res.json({
       address,
-      balance
+      balance,
+      staked: validator ? validator.stake : 0,
+      totalRewards: validator ? validator.totalRewards : 0
     });
   });
 
@@ -45,6 +53,11 @@ function createRouter(blockchain) {
       tx.sign(wallet);
 
       blockchain.addTransaction(tx, wallet.getPublicKey());
+
+      // Broadcast to peers
+      if (p2pServer) {
+        p2pServer.broadcastTransaction(tx);
+      }
 
       res.json({
         success: true,
@@ -76,13 +89,77 @@ function createRouter(blockchain) {
         });
       }
 
-      blockchain.addStake(address, parseFloat(amount), wallet.getPublicKey());
+      const validator = blockchain.addStake(address, parseFloat(amount), wallet.getPublicKey());
 
       res.json({
         success: true,
-        address,
-        stakedAmount: parseFloat(amount),
+        validator: validator.toJSON(),
         message: 'Stake added successfully'
+      });
+    } catch (error) {
+      res.status(400).json({
+        error: error.message
+      });
+    }
+  });
+
+  router.post('/unstake', (req, res) => {
+    try {
+      const { address, privateKey } = req.body;
+
+      if (!address || !privateKey) {
+        return res.status(400).json({
+          error: 'Missing required fields: address, privateKey'
+        });
+      }
+
+      const wallet = Wallet.import(privateKey);
+      
+      if (wallet.getAddress() !== address) {
+        return res.status(400).json({
+          error: 'Private key does not match address'
+        });
+      }
+
+      const unlockBlock = blockchain.unstake(address);
+
+      res.json({
+        success: true,
+        message: `Unstake initiated. Funds will be available at block ${unlockBlock}`,
+        unlockBlock,
+        currentBlock: blockchain.chain.length
+      });
+    } catch (error) {
+      res.status(400).json({
+        error: error.message
+      });
+    }
+  });
+
+  router.post('/withdraw', (req, res) => {
+    try {
+      const { address, privateKey } = req.body;
+
+      if (!address || !privateKey) {
+        return res.status(400).json({
+          error: 'Missing required fields: address, privateKey'
+        });
+      }
+
+      const wallet = Wallet.import(privateKey);
+      
+      if (wallet.getAddress() !== address) {
+        return res.status(400).json({
+          error: 'Private key does not match address'
+        });
+      }
+
+      const amount = blockchain.withdrawStake(address);
+
+      res.json({
+        success: true,
+        amount,
+        message: `${amount} SAYM withdrawn successfully`
       });
     } catch (error) {
       res.status(400).json({
@@ -97,6 +174,27 @@ function createRouter(blockchain) {
       count: validators.length,
       validators
     });
+  });
+
+  router.get('/validators/all', (req, res) => {
+    const validators = blockchain.getAllValidators();
+    res.json({
+      count: validators.length,
+      validators
+    });
+  });
+
+  router.get('/validator/:address', (req, res) => {
+    const { address } = req.params;
+    const validator = blockchain.stakeManager.getValidator(address);
+    
+    if (!validator) {
+      return res.status(404).json({
+        error: 'Validator not found'
+      });
+    }
+
+    res.json(validator.toJSON());
   });
 
   router.post('/faucet', (req, res) => {
@@ -132,6 +230,12 @@ function createRouter(blockchain) {
   });
 
   router.post('/mine', async (req, res) => {
+    if (blockchain.config.network !== 'testnet') {
+      return res.status(403).json({
+        error: 'Manual mining only allowed on testnet'
+      });
+    }
+
     try {
       const block = await blockchain.createBlock();
       
@@ -140,6 +244,11 @@ function createRouter(blockchain) {
           success: false,
           message: 'No transactions in mempool or no validators available'
         });
+      }
+
+      // Broadcast block to peers
+      if (p2pServer) {
+        p2pServer.broadcastBlock(block);
       }
 
       res.json({
