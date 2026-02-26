@@ -2,6 +2,7 @@ import express from 'express';
 import Transaction from '../core/transaction.js';
 import Wallet from '../wallet/wallet.js';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 
 function createRouter(blockchain, p2pServer) {
   const router = express.Router();
@@ -64,108 +65,51 @@ function createRouter(blockchain, p2pServer) {
   router.post('/broadcast', (req, res) => {
     try {
       const { type, data, timestamp, signature, publicKey } = req.body;
-
+  
       if (!type || !data || !timestamp || !signature || !publicKey) {
         return res.status(400).json({
-          error: 'Missing required fields: type, data, timestamp, signature, publicKey'
+          error: 'Missing required fields'
         });
       }
-
-      // Create transaction from signed data
+  
       const tx = new Transaction(type, data);
       tx.timestamp = timestamp;
       tx.signature = signature;
       tx.id = uuidv4();
-
-      // Store public key for verification
+  
+      // Verify address matches public key
+      const derivedAddress = crypto
+        .createHash('sha256')
+        .update(publicKey)
+        .digest('hex')
+        .substring(0, 40);
+  
+      if (derivedAddress !== data.from) {
+        return res.status(400).json({
+          error: 'Address does not match public key'
+        });
+      }
+  
       blockchain.state.setPublicKey(data.from, publicKey);
-
-      // Verify signature (backend verifies, doesn't sign!)
+  
       if (!tx.isValid(blockchain.state.publicKeys)) {
         return res.status(400).json({
           error: 'Invalid signature'
         });
       }
-
-      // Validate transaction based on type
-      switch (type) {
-        case 'TRANSFER':
-          if (blockchain.state.getBalance(data.from) < data.amount) {
-            return res.status(400).json({
-              error: 'Insufficient balance'
-            });
-          }
-          break;
-
-        case 'STAKE':
-          if (blockchain.state.getBalance(data.from) < data.amount) {
-            return res.status(400).json({
-              error: 'Insufficient balance for staking'
-            });
-          }
-          if (data.amount < blockchain.config.minStake) {
-            return res.status(400).json({
-              error: `Minimum stake is ${blockchain.config.minStake} SAYM`
-            });
-          }
-          break;
-
-        case 'UNSTAKE':
-          if (blockchain.state.getStake(data.from) === 0) {
-            return res.status(400).json({
-              error: 'No stake to unstake'
-            });
-          }
-          if (blockchain.state.isUnstaking(data.from)) {
-            return res.status(400).json({
-              error: 'Already unstaking'
-            });
-          }
-          break;
-
-        case 'CONTRACT_DEPLOY':
-          if (data.code.length > blockchain.config.maxContractSize) {
-            return res.status(400).json({
-              error: 'Contract code too large'
-            });
-          }
-          break;
-
-        case 'CONTRACT_CALL':
-          const contract = blockchain.state.getContract(data.contractAddress);
-          if (!contract) {
-            return res.status(400).json({
-              error: 'Contract not found'
-            });
-          }
-          break;
-      }
-
-      // Add to mempool
+  
       blockchain.mempool.push(tx);
-
-      // Broadcast to peers
+  
       if (p2pServer) {
         p2pServer.broadcastTransaction(tx);
       }
-
-      console.log(`✓ Transaction received: ${type} from ${data.from.substring(0, 8)}...`);
-
-      const response = {
+  
+      res.json({
         success: true,
-        txId: tx.id,
-        message: 'Transaction accepted and added to mempool'
-      };
-
-      // Add unlock block for unstake
-      if (type === 'UNSTAKE') {
-        response.unlockBlock = blockchain.chain.length + blockchain.config.unstakeDelay;
-      }
-
-      res.json(response);
-
+        txId: tx.id
+      });
+  
     } catch (error) {
-      console.error('Broadcast error:', error);
       res.status(400).json({ error: error.message });
     }
   });

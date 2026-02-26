@@ -579,3 +579,41 @@ function hideLoading() {
     overlay.remove();
   }
 }
+
+// Faucet
+async function claimFaucet() {
+  const address = document.getElementById('faucet-address').value.trim();
+
+  if (!address) {
+    showResult('faucet', 'Please enter a wallet address', 'error');
+    return;
+  }
+
+  try {
+    showLoading('Requesting faucet...');
+
+    const res = await fetch(`${apiBase}/faucet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address })
+    });
+
+    const data = await res.json();
+    hideLoading();
+
+    if (data.success) {
+      showResult(
+        'faucet',
+        `✅ Faucet credited 1000 SAYM (pending in mempool)`,
+        'success'
+      );
+      document.getElementById('faucet-address').value = '';
+      updateStats();
+    } else {
+      showResult('faucet', data.error || 'Faucet failed', 'error');
+    }
+  } catch (error) {
+    hideLoading();
+    showResult('faucet', error.message, 'error');
+  }
+}

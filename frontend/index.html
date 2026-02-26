@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sayman Blockchain</title>
   <link rel="stylesheet" href="style.css">
-  <!-- Add elliptic library from CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/elliptic@6.5.4/dist/elliptic.min.js"></script>
+
+  <!-- FIXED elliptic CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 </head>
 <body>
   <nav>
@@ -20,11 +21,13 @@
         <button onclick="showPage('validators')">Validators</button>
         <button onclick="showPage('explorer')">Explorer</button>
         <button onclick="showPage('contracts')">Contracts</button>
+        <button onclick="showPage('faucet')">Faucet</button>
       </div>
     </div>
   </nav>
 
   <main class="container">
+
     <!-- Dashboard -->
     <div id="dashboard" class="page active">
       <h2>Dashboard</h2>
@@ -115,6 +118,20 @@
       <div id="stake-result" class="result"></div>
     </div>
 
+    <!-- Faucet -->
+    <div id="faucet" class="page">
+      <h2>Testnet Faucet</h2>
+
+      <div class="form-section">
+        <input type="text" id="faucet-address" placeholder="Paste Wallet Address">
+        <button onclick="claimFaucet()" class="btn-primary">
+          Claim 1000 SAYM
+        </button>
+      </div>
+
+      <div id="faucet-result" class="result"></div>
+    </div>
+
     <!-- Validators -->
     <div id="validators" class="page">
       <h2>Validators</h2>
@@ -130,35 +147,12 @@
     <!-- Contracts -->
     <div id="contracts" class="page">
       <h2>Smart Contracts</h2>
-      
-      <div class="form-section">
-        <h3>Deploy Contract</h3>
-        <textarea id="contract-code" placeholder="JavaScript contract code&#10;&#10;Example:&#10;function increment() {&#10;  state.count = (state.count || 0) + 1;&#10;}" rows="10"></textarea>
-        <input type="password" id="deploy-key" placeholder="Your Private Key">
-        <button onclick="deployContract()" class="btn-primary">Deploy</button>
-      </div>
-
-      <div class="form-section">
-        <h3>Call Contract</h3>
-        <input type="text" id="call-address" placeholder="Contract Address">
-        <input type="text" id="call-method" placeholder="Method Name">
-        <textarea id="call-args" placeholder='Arguments (JSON)&#10;Example: {"amount": 100}' rows="3"></textarea>
-        <input type="password" id="call-key" placeholder="Your Private Key">
-        <button onclick="callContract()" class="btn-primary">Call</button>
-      </div>
-
-      <div id="contract-result" class="result"></div>
-
-      <div class="section">
-        <h3>Deployed Contracts</h3>
-        <div id="contracts-list"></div>
-      </div>
+      <div id="contracts-list"></div>
     </div>
+
   </main>
 
-  <!-- Load crypto library first -->
   <script src="crypto-client.js"></script>
-  <!-- Then load main app -->
   <script src="app.js"></script>
 </body>
 </html>

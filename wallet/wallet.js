@@ -1,51 +1,36 @@
-import pkg from 'elliptic';
-const { ec: EC } = pkg;
 import crypto from 'crypto';
+import elliptic from 'elliptic';
 
+const EC = elliptic.ec;
 const ec = new EC('secp256k1');
 
 class Wallet {
-  constructor(privateKey = null) {
-    if (privateKey) {
-      this.keyPair = ec.keyFromPrivate(privateKey, 'hex');
-    } else {
-      this.keyPair = ec.genKeyPair();
-    }
-    
-    this.publicKey = this.keyPair.getPublic('hex');
+  constructor() {
+    this.keyPair = ec.genKeyPair();
     this.privateKey = this.keyPair.getPrivate('hex');
-    this.address = this.generateAddress(this.publicKey);
+    this.publicKey = this.keyPair.getPublic('hex');
+    this.address = this.deriveAddress(this.publicKey);
   }
 
-  generateAddress(publicKey) {
-    const hash = crypto.createHash('sha256').update(publicKey).digest('hex');
+  deriveAddress(publicKey) {
+    const hash = crypto
+      .createHash('sha256')
+      .update(publicKey)
+      .digest('hex');
     return hash.substring(0, 40);
   }
 
-  sign(dataHash) {
-    const signature = this.keyPair.sign(dataHash);
-    return signature.toDER('hex');
-  }
-
-  static verifySignature(publicKey, signature, dataHash) {
-    try {
-      const key = ec.keyFromPublic(publicKey, 'hex');
-      return key.verify(dataHash, signature);
-    } catch (error) {
-      return false;
-    }
-  }
-
-  export() {
+  sign(hash) {
+    const sig = this.keyPair.sign(hash);
     return {
-      address: this.address,
-      publicKey: this.publicKey,
-      privateKey: this.privateKey
+      r: sig.r.toString('hex'),
+      s: sig.s.toString('hex')
     };
   }
 
-  static import(privateKey) {
-    return new Wallet(privateKey);
+  static verifySignature(publicKey, signature, hash) {
+    const key = ec.keyFromPublic(publicKey, 'hex');
+    return key.verify(hash, signature);
   }
 }
 
