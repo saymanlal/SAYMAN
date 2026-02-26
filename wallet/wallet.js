@@ -1,8 +1,7 @@
-// core/wallet.js
 import pkg from 'elliptic';
+const { ec: EC } = pkg;
 import crypto from 'crypto';
 
-const { ec: EC } = pkg;
 const ec = new EC('secp256k1');
 
 class Wallet {
@@ -35,18 +34,6 @@ class Wallet {
     } catch (error) {
       return false;
     }
-  }
-
-  getPublicKey() {
-    return this.publicKey;
-  }
-
-  getPrivateKey() {
-    return this.privateKey;
-  }
-
-  getAddress() {
-    return this.address;
   }
 
   export() {

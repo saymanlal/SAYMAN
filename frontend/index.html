@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sayman Blockchain</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav>
+    <div class="container">
+      <h1>⛓️ SAYMAN</h1>
+      <div class="nav-links">
+        <button onclick="showPage('dashboard')">Dashboard</button>
+        <button onclick="showPage('wallet')">Wallet</button>
+        <button onclick="showPage('send')">Send</button>
+        <button onclick="showPage('stake')">Stake</button>
+        <button onclick="showPage('validators')">Validators</button>
+        <button onclick="showPage('explorer')">Explorer</button>
+        <button onclick="showPage('contracts')">Contracts</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container">
+    <!-- Dashboard -->
+    <div id="dashboard" class="page active">
+      <h2>Dashboard</h2>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h3 id="stat-blocks">0</h3>
+          <p>Blocks</p>
+        </div>
+        <div class="stat-card">
+          <h3 id="stat-validators">0</h3>
+          <p>Validators</p>
+        </div>
+        <div class="stat-card">
+          <h3 id="stat-stake">0</h3>
+          <p>Total Stake</p>
+        </div>
+        <div class="stat-card">
+          <h3 id="stat-mempool">0</h3>
+          <p>Mempool</p>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3>Recent Blocks</h3>
+        <div id="recent-blocks"></div>
+      </div>
+    </div>
+
+    <!-- Wallet -->
+    <div id="wallet" class="page">
+      <h2>Wallet</h2>
+      <div class="section">
+        <button onclick="createWallet()" class="btn-primary">Create New Wallet</button>
+        <button onclick="importWallet()" class="btn-secondary">Import Wallet</button>
+      </div>
+
+      <div id="wallet-info" class="section hidden">
+        <h3>Your Wallet</h3>
+        <div class="info-box">
+          <label>Address:</label>
+          <input type="text" id="wallet-address" readonly>
+        </div>
+        <div class="info-box">
+          <label>Private Key:</label>
+          <input type="password" id="wallet-key" readonly>
+          <button onclick="toggleKey()">Show</button>
+        </div>
+        <div class="info-box">
+          <label>Balance:</label>
+          <span id="wallet-balance">0 SAYM</span>
+        </div>
+        <div class="info-box">
+          <label>Staked:</label>
+          <span id="wallet-staked">0 SAYM</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Send -->
+    <div id="send" class="page">
+      <h2>Send SAYM</h2>
+      <div class="form-section">
+        <input type="text" id="send-to" placeholder="Recipient Address">
+        <input type="number" id="send-amount" placeholder="Amount">
+        <input type="password" id="send-key" placeholder="Your Private Key">
+        <button onclick="sendTransaction()" class="btn-primary">Send</button>
+      </div>
+      <div id="send-result" class="result"></div>
+    </div>
+
+    <!-- Stake -->
+    <div id="stake" class="page">
+      <h2>Staking</h2>
+      <div class="form-section">
+        <h3>Stake SAYM</h3>
+        <input type="number" id="stake-amount" placeholder="Amount to Stake">
+        <input type="password" id="stake-key" placeholder="Your Private Key">
+        <button onclick="stakeTokens()" class="btn-primary">Stake</button>
+      </div>
+
+      <div class="form-section">
+        <h3>Unstake</h3>
+        <input type="password" id="unstake-key" placeholder="Your Private Key">
+        <button onclick="unstakeTokens()" class="btn-secondary">Unstake</button>
+      </div>
+      <div id="stake-result" class="result"></div>
+    </div>
+
+    <!-- Validators -->
+    <div id="validators" class="page">
+      <h2>Validators</h2>
+      <div id="validators-list"></div>
+    </div>
+
+    <!-- Explorer -->
+    <div id="explorer" class="page">
+      <h2>Block Explorer</h2>
+      <div id="blocks-list"></div>
+    </div>
+
+    <!-- Contracts -->
+    <div id="contracts" class="page">
+      <h2>Smart Contracts</h2>
+      
+      <div class="form-section">
+        <h3>Deploy Contract</h3>
+        <textarea id="contract-code" placeholder="JavaScript contract code" rows="10"></textarea>
+        <input type="password" id="deploy-key" placeholder="Your Private Key">
+        <button onclick="deployContract()" class="btn-primary">Deploy</button>
+      </div>
+
+      <div class="form-section">
+        <h3>Call Contract</h3>
+        <input type="text" id="call-address" placeholder="Contract Address">
+        <input type="text" id="call-method" placeholder="Method Name">
+        <textarea id="call-args" placeholder='Arguments (JSON)' rows="3"></textarea>
+        <input type="password" id="call-key" placeholder="Your Private Key">
+        <button onclick="callContract()" class="btn-primary">Call</button>
+      </div>
+
+      <div id="contract-result" class="result"></div>
+
+      <div class="section">
+        <h3>Deployed Contracts</h3>
+        <div id="contracts-list"></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

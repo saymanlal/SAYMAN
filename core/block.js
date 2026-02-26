@@ -1,15 +1,13 @@
-// core/block.js
 import crypto from 'crypto';
 import Transaction from './transaction.js';
 
 class Block {
-  constructor(index, transactions, previousHash, validator, stakeWeight) {
+  constructor(index, transactions, previousHash, validator) {
     this.index = index;
     this.timestamp = Date.now();
     this.transactions = transactions;
     this.previousHash = previousHash;
     this.validator = validator;
-    this.stakeWeight = stakeWeight;
     this.hash = this.calculateHash();
   }
 
@@ -19,10 +17,9 @@ class Block {
       .update(
         this.index +
         this.timestamp +
-        JSON.stringify(this.transactions) +
+        JSON.stringify(this.transactions.map(tx => tx.toJSON())) +
         this.previousHash +
-        this.validator +
-        this.stakeWeight
+        this.validator
       )
       .digest('hex');
   }
@@ -34,19 +31,17 @@ class Block {
       transactions: this.transactions.map(tx => tx.toJSON()),
       previousHash: this.previousHash,
       validator: this.validator,
-      stakeWeight: this.stakeWeight,
       hash: this.hash
     };
   }
 
-  static fromJSON(data) {
+  static async fromJSON(data) {
     const transactions = data.transactions.map(tx => Transaction.fromJSON(tx));
     const block = new Block(
       data.index,
       transactions,
       data.previousHash,
-      data.validator,
-      data.stakeWeight
+      data.validator
     );
     block.timestamp = data.timestamp;
     block.hash = data.hash;

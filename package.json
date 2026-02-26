@@ -1,18 +1,16 @@
 {
   "name": "sayman",
-  "version": "2.0.0",
-  "description": "Sayman - A custom standalone blockchain with SAYM coin and Advanced PoS",
-  "main": "index.js",
+  "version": "3.0.0",
+  "description": "Sayman - Deterministic PoS Blockchain with Smart Contracts",
+  "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "mainnet": "NODE_ENV=mainnet node index.js",
-    "testnet": "NODE_ENV=testnet node index.js",
-    "node1": "PORT=3000 P2P_PORT=6001 NODE_ENV=testnet node index.js",
-    "node2": "PORT=3001 P2P_PORT=6002 PEERS=ws://localhost:6001 NODE_ENV=testnet node index.js",
-    "node3": "PORT=3002 P2P_PORT=6003 PEERS=ws://localhost:6001,ws://localhost:6002 NODE_ENV=testnet node index.js"
+    "start": "node server.js",
+    "node1": "PORT=3000 P2P_PORT=6001 node server.js",
+    "node2": "PORT=3001 P2P_PORT=6002 PEERS=ws://localhost:6001 node server.js",
+    "node3": "PORT=3002 P2P_PORT=6003 PEERS=ws://localhost:6001,ws://localhost:6002 node server.js"
   },
-  "keywords": ["blockchain", "cryptocurrency", "proof-of-stake", "p2p"],
+  "keywords": ["blockchain", "cryptocurrency", "proof-of-stake", "smart-contracts"],
   "author": "",
   "license": "MIT",
   "dependencies": {

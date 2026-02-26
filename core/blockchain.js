@@ -1,271 +1,332 @@
 import Block from './block.js';
 import Transaction from './transaction.js';
-import StakeManager from './stake.js';
+import StateEngine from './state.js';
 import ProofOfStake from './pos.js';
-import RewardSystem from './rewards.js';
-import SlashingSystem from './slashing.js';
+import ContractEngine from './contracts.js';
+import { Level } from 'level';
 
 class Blockchain {
-  constructor(config, db) {
+  constructor(config) {
     this.config = config;
-    this.db = db;
     this.chain = [];
     this.mempool = [];
-    this.balances = new Map();
-    this.publicKeys = new Map();
-    this.stakeManager = new StakeManager(config);
-    this.pos = new ProofOfStake(this.stakeManager);
-    this.rewardSystem = new RewardSystem(config);
-    this.slashingSystem = new SlashingSystem(config);
+    this.state = new StateEngine();
+    this.pos = new ProofOfStake(this.state, config);
+    this.contracts = new ContractEngine(this.state);
+    this.db = new Level(`./data/blockchain_${config.p2pPort}`, { valueEncoding: 'json' });
+    this.isProducing = false;
   }
 
   async initialize() {
-    const savedChain = await this.db.getChain();
-    
-    if (savedChain && savedChain.length > 0) {
-      this.chain = savedChain;
-      await this.rebuildState();
-      console.log(`✓ Loaded ${this.chain.length} blocks from storage`);
-    } else {
-      this.createGenesisBlock();
-      await this.saveChain();
-      console.log('✓ Created genesis block');
+    try {
+      const savedChain = await this.db.get('chain');
+      
+      if (savedChain && savedChain.length > 0) {
+        console.log(`📦 Loading ${savedChain.length} blocks from storage...`);
+        
+        // Load blocks
+        for (const blockData of savedChain) {
+          const block = await Block.fromJSON(blockData);
+          this.chain.push(block);
+        }
+
+        // Replay state from genesis
+        console.log('🔄 Replaying state from genesis...');
+        this.replayState();
+        
+        console.log('✓ Blockchain loaded and state rebuilt');
+      } else {
+        console.log('🎬 Creating genesis block...');
+        this.createGenesisBlock();
+        await this.saveChain();
+      }
+
+      this.printStats();
+    } catch (error) {
+      if (error.code === 'LEVEL_NOT_FOUND') {
+        console.log('🎬 Creating genesis block...');
+        this.createGenesisBlock();
+        await this.saveChain();
+        this.printStats();
+      } else {
+        throw error;
+      }
     }
   }
 
   createGenesisBlock() {
-    const genesisTx = new Transaction(
-      'system',
-      this.config.genesisValidator,
-      this.config.initialSupply,
-      'genesis'
-    );
+    const transactions = [];
 
-    const genesisBlock = new Block(
-      0,
-      [genesisTx],
-      '0',
-      this.config.genesisValidator,
-      0
-    );
+    // Genesis allocations
+    for (const [address, amount] of Object.entries(this.config.genesisAllocations)) {
+      const tx = new Transaction('GENESIS', { to: address, amount });
+      transactions.push(tx);
+    }
 
+    // Genesis stakes
+    for (const [address, amount] of Object.entries(this.config.genesisStakes)) {
+      const tx = new Transaction('STAKE', { from: address, amount });
+      transactions.push(tx);
+    }
+
+    const genesisBlock = new Block(0, transactions, '0', 'genesis');
     this.chain.push(genesisBlock);
-    this.balances.set(this.config.genesisValidator, this.config.initialSupply);
-    
-    // Add initial stake for genesis validator
-    this.stakeManager.addValidator(
-      this.config.genesisValidator,
-      this.config.minimumStake * 10
-    );
+
+    // Apply genesis state
+    this.applyBlock(genesisBlock);
   }
 
-  async rebuildState() {
-    this.balances.clear();
-    this.publicKeys.clear();
-    this.stakeManager = new StakeManager(this.config);
-    this.pos = new ProofOfStake(this.stakeManager);
+  replayState() {
+    // Clear all state
+    this.state.clear();
 
+    // Replay all blocks from genesis
     for (const block of this.chain) {
-      for (const tx of block.transactions) {
-        this.applyTransaction(tx);
-      }
-    }
-    
-    // Re-add genesis stake
-    if (this.chain.length > 0) {
-      const genesisBalance = this.balances.get(this.config.genesisValidator);
-      if (genesisBalance >= this.config.minimumStake * 10) {
-        this.stakeManager.addValidator(
-          this.config.genesisValidator,
-          this.config.minimumStake * 10
-        );
-      }
+      this.applyBlock(block);
     }
   }
 
-  applyTransaction(tx) {
-    if (tx.from === 'system') {
-      this.balances.set(tx.to, (this.balances.get(tx.to) || 0) + tx.amount);
-      return;
+  applyBlock(block) {
+    for (const tx of block.transactions) {
+      this.applyTransaction(tx, block.index);
     }
-
-    const fromBalance = this.balances.get(tx.from) || 0;
-    const toBalance = this.balances.get(tx.to) || 0;
-
-    this.balances.set(tx.from, fromBalance - tx.amount);
-    this.balances.set(tx.to, toBalance + tx.amount);
   }
 
-  getBalance(address) {
-    return this.balances.get(address) || 0;
+  applyTransaction(tx, blockIndex) {
+    try {
+      switch (tx.type) {
+        case 'GENESIS':
+          this.state.addBalance(tx.data.to, tx.data.amount);
+          break;
+
+        case 'TRANSFER':
+          this.state.subtractBalance(tx.data.from, tx.data.amount);
+          this.state.addBalance(tx.data.to, tx.data.amount);
+          break;
+
+        case 'STAKE':
+          this.state.subtractBalance(tx.data.from, tx.data.amount);
+          this.state.addStake(tx.data.from, tx.data.amount);
+          this.state.resetMissedBlocks(tx.data.from);
+          break;
+
+        case 'UNSTAKE':
+          const stakeAmount = this.state.getStake(tx.data.from);
+          const unlockBlock = blockIndex + this.config.unstakeDelay;
+          this.state.setStake(tx.data.from, 0);
+          this.state.initiateUnstake(tx.data.from, unlockBlock);
+          // Funds locked until unlockBlock
+          break;
+
+        case 'REWARD':
+          this.state.addBalance(tx.data.to, tx.data.amount);
+          break;
+
+        case 'CONTRACT_DEPLOY':
+          this.contracts.deploy(tx.data.from, tx.data.code, tx.timestamp);
+          break;
+
+        case 'CONTRACT_CALL':
+          this.contracts.call(
+            tx.data.from,
+            tx.data.contractAddress,
+            tx.data.method,
+            tx.data.args
+          );
+          break;
+
+        case 'SLASH':
+          this.state.subtractStake(tx.data.validator, tx.data.amount);
+          this.state.resetMissedBlocks(tx.data.validator);
+          break;
+      }
+    } catch (error) {
+      console.error(`Error applying transaction ${tx.id}: ${error.message}`);
+    }
   }
 
   addTransaction(tx, publicKey) {
-    // Store public key first
-    this.publicKeys.set(tx.from, publicKey);
-    
-    if (!tx.isValid((addr) => this.publicKeys.get(addr))) {
+    // Store public key
+    if (tx.data.from) {
+      this.state.setPublicKey(tx.data.from, publicKey);
+    }
+
+    // Validate signature
+    if (!tx.isValid(this.state.publicKeys)) {
       throw new Error('Invalid transaction signature');
     }
-  
-    if (tx.from !== 'system') {
-      const balance = this.getBalance(tx.from);
-      if (balance < tx.amount) {
-        throw new Error('Insufficient balance');
-      }
+
+    // Validate based on type
+    switch (tx.type) {
+      case 'TRANSFER':
+        if (this.state.getBalance(tx.data.from) < tx.data.amount) {
+          throw new Error('Insufficient balance');
+        }
+        break;
+
+      case 'STAKE':
+        if (this.state.getBalance(tx.data.from) < tx.data.amount) {
+          throw new Error('Insufficient balance for staking');
+        }
+        if (tx.data.amount < this.config.minStake) {
+          throw new Error(`Minimum stake is ${this.config.minStake} SAYM`);
+        }
+        break;
+
+      case 'UNSTAKE':
+        if (this.state.getStake(tx.data.from) === 0) {
+          throw new Error('No stake to unstake');
+        }
+        if (this.state.isUnstaking(tx.data.from)) {
+          throw new Error('Already unstaking');
+        }
+        break;
     }
-  
+
+    // Add to mempool
     this.mempool.push(tx);
   }
 
-  addStake(address, amount, publicKey) {
-    const balance = this.getBalance(address);
-    
-    if (balance < amount) {
-      throw new Error('Insufficient balance for staking');
-    }
-
-    this.publicKeys.set(address, publicKey);
-    const validator = this.stakeManager.addValidator(address, amount);
-    this.balances.set(address, balance - amount);
-
-    return validator;
-  }
-
-  unstake(address) {
-    const currentBlock = this.chain.length;
-    const unlockBlock = this.stakeManager.initiateUnstake(address, currentBlock);
-    return unlockBlock;
-  }
-
-  withdrawStake(address) {
-    const currentBlock = this.chain.length;
-    const amount = this.stakeManager.withdrawStake(address, currentBlock);
-    const balance = this.getBalance(address);
-    this.balances.set(address, balance + amount);
-    return amount;
-  }
-
   async createBlock() {
-    if (this.mempool.length === 0) {
+    if (this.isProducing) {
       return null;
     }
 
-    const lastBlock = this.getLastBlock();
-    const validator = this.pos.selectValidator(lastBlock.hash);
+    this.isProducing = true;
 
-    if (!validator) {
-      console.log('⚠ No validators available');
+    try {
+      const lastBlock = this.getLastBlock();
+      const validator = this.pos.selectValidator(lastBlock.hash);
+
+      if (!validator) {
+        console.log('⚠ No validators available');
+        this.isProducing = false;
+        return null;
+      }
+
+      // Get pending transactions
+      const transactions = [...this.mempool];
+      this.mempool = [];
+
+      // Add block reward
+      const rewardTx = Transaction.createReward(validator, this.config.blockReward);
+      transactions.push(rewardTx);
+
+      // Check for slashing
+      const slashEvents = this.pos.checkSlashing(this.config);
+      for (const slash of slashEvents) {
+        const slashTx = Transaction.createSlash(
+          slash.validator,
+          slash.amount,
+          slash.reason
+        );
+        transactions.push(slashTx);
+      }
+
+      // Create block
+      const block = new Block(
+        this.chain.length,
+        transactions,
+        lastBlock.hash,
+        validator
+      );
+
+      // Apply block to state
+      this.applyBlock(block);
+
+      // Add to chain
+      this.chain.push(block);
+
+      // Reset missed blocks for validator
+      this.state.resetMissedBlocks(validator);
+
+      // Save
+      await this.saveChain();
+
+      console.log(`✓ Block #${block.index} created by ${validator.substring(0, 8)}...`);
+      console.log(`  Transactions: ${block.transactions.length}`);
+      console.log(`  Hash: ${block.hash.substring(0, 16)}...`);
+
+      this.isProducing = false;
+      return block;
+
+    } catch (error) {
+      console.error('Error creating block:', error);
+      this.isProducing = false;
       return null;
     }
+  }
 
-    const transactions = [...this.mempool];
-    this.mempool = [];
-
-    const block = new Block(
-      this.chain.length,
-      transactions,
-      lastBlock.hash,
-      validator,
-      this.pos.getValidatorWeight(validator)
-    );
-
-    this.chain.push(block);
-
-    // Apply transactions
-    for (const tx of transactions) {
-      this.applyTransaction(tx);
+  async replaceChain(newChain) {
+    if (newChain.length <= this.chain.length) {
+      return false;
     }
 
-    // Reward validator
-    const validatorObj = this.stakeManager.getValidator(validator);
-    if (validatorObj) {
-      const reward = this.rewardSystem.distributeReward(validatorObj, block.index);
-      const balance = this.getBalance(validator);
-      this.balances.set(validator, balance + reward);
-      this.pos.recordBlockCreation(validator);
+    if (!this.isValidChain(newChain)) {
+      console.log('✗ Received invalid chain');
+      return false;
     }
 
-    // Check for slashing
-    const slashResults = this.slashingSystem.checkAndSlashInactiveValidators(
-      this.stakeManager.getAllValidators()
-    );
-
-    if (slashResults.length > 0) {
-      console.log(`⚠ Slashed ${slashResults.length} validator(s)`);
-    }
-
+    console.log(`📥 Replacing chain (${this.chain.length} -> ${newChain.length} blocks)`);
+    
+    this.chain = newChain;
+    this.replayState();
     await this.saveChain();
-    return block;
+
+    console.log('✓ Chain replaced and state rebuilt');
+    return true;
+  }
+
+  isValidChain(chain) {
+    if (chain.length === 0) return false;
+
+    for (let i = 1; i < chain.length; i++) {
+      const currentBlock = chain[i];
+      const previousBlock = chain[i - 1];
+
+      if (currentBlock.previousHash !== previousBlock.hash) {
+        return false;
+      }
+
+      if (currentBlock.hash !== currentBlock.calculateHash()) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   getLastBlock() {
     return this.chain[this.chain.length - 1];
   }
 
-  isValid() {
-    for (let i = 1; i < this.chain.length; i++) {
-      const currentBlock = this.chain[i];
-      const previousBlock = this.chain[i - 1];
-
-      if (currentBlock.hash !== currentBlock.calculateHash()) {
-        return false;
-      }
-
-      if (currentBlock.previousHash !== previousBlock.hash) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   async saveChain() {
-    await this.db.saveChain(this.chain);
-  }
-
-  getChain() {
-    return this.chain.map(block => block.toJSON());
-  }
-
-  getValidators() {
-    return this.stakeManager.getActiveValidators().map(v => v.toJSON());
-  }
-
-  getAllValidators() {
-    return this.stakeManager.getAllValidators().map(v => v.toJSON());
-  }
-
-  getMempoolSize() {
-    return this.mempool.length;
-  }
-
-  faucet(address) {
-    if (!this.config.faucetEnabled) {
-      throw new Error('Faucet not enabled on this network');
-    }
-
-    const faucetTx = new Transaction(
-      'system',
-      address,
-      this.config.faucetAmount,
-      'faucet'
-    );
-
-    this.mempool.push(faucetTx);
-    return faucetTx;
+    const chainData = this.chain.map(block => block.toJSON());
+    await this.db.put('chain', chainData);
   }
 
   getStats() {
     return {
       blocks: this.chain.length,
-      validators: this.stakeManager.getActiveValidators().length,
-      totalValidators: this.stakeManager.getAllValidators().length,
-      totalStake: this.stakeManager.getTotalStake(),
+      validators: this.state.getValidators().length,
+      totalStake: this.state.getTotalStake(),
       mempool: this.mempool.length,
-      totalRewards: this.rewardSystem.getTotalRewardsDistributed(
-        this.stakeManager.getAllValidators()
-      )
+      contracts: this.state.getAllContracts().length
     };
+  }
+
+  printStats() {
+    const stats = this.getStats();
+    console.log('\n📊 Blockchain Stats:');
+    console.log(`   Blocks: ${stats.blocks}`);
+    console.log(`   Validators: ${stats.validators}`);
+    console.log(`   Total Stake: ${stats.totalStake} SAYM`);
+    console.log(`   Mempool: ${stats.mempool}`);
+    console.log(`   Contracts: ${stats.contracts}\n`);
+  }
+
+  async close() {
+    await this.db.close();
   }
 }
 
