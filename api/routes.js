@@ -1,6 +1,7 @@
 import express from 'express';
 import Transaction from '../core/transaction.js';
 import Wallet from '../wallet/wallet.js';
+import { v4 as uuidv4 } from 'uuid';
 
 function createRouter(blockchain, p2pServer) {
   const router = express.Router();
@@ -15,17 +16,6 @@ function createRouter(blockchain, p2pServer) {
     res.json({
       blocks: blockchain.chain.map(b => b.toJSON())
     });
-  });
-
-  router.get('/blocks/:index', (req, res) => {
-    const index = parseInt(req.params.index);
-    const block = blockchain.chain[index];
-    
-    if (!block) {
-      return res.status(404).json({ error: 'Block not found' });
-    }
-
-    res.json(block.toJSON());
   });
 
   // Balance
@@ -69,195 +59,118 @@ function createRouter(blockchain, p2pServer) {
     res.json(contract);
   });
 
-  // Send transaction
-  router.post('/send', (req, res) => {
+  // MAIN ENDPOINT - Broadcast signed transaction
+  // This is the ONLY way to submit transactions (proper blockchain architecture)
+  router.post('/broadcast', (req, res) => {
     try {
-      const { from, to, amount, privateKey } = req.body;
+      const { type, data, timestamp, signature, publicKey } = req.body;
 
-      if (!from || !to || !amount || !privateKey) {
+      if (!type || !data || !timestamp || !signature || !publicKey) {
         return res.status(400).json({
-          error: 'Missing required fields'
+          error: 'Missing required fields: type, data, timestamp, signature, publicKey'
         });
       }
 
-      const wallet = Wallet.import(privateKey);
-      
-      if (wallet.address !== from) {
+      // Create transaction from signed data
+      const tx = new Transaction(type, data);
+      tx.timestamp = timestamp;
+      tx.signature = signature;
+      tx.id = uuidv4();
+
+      // Store public key for verification
+      blockchain.state.setPublicKey(data.from, publicKey);
+
+      // Verify signature (backend verifies, doesn't sign!)
+      if (!tx.isValid(blockchain.state.publicKeys)) {
         return res.status(400).json({
-          error: 'Private key does not match from address'
+          error: 'Invalid signature'
         });
       }
 
-      const tx = Transaction.createTransfer(from, to, parseFloat(amount));
-      tx.sign(wallet);
+      // Validate transaction based on type
+      switch (type) {
+        case 'TRANSFER':
+          if (blockchain.state.getBalance(data.from) < data.amount) {
+            return res.status(400).json({
+              error: 'Insufficient balance'
+            });
+          }
+          break;
 
-      blockchain.addTransaction(tx, wallet.publicKey);
-      
+        case 'STAKE':
+          if (blockchain.state.getBalance(data.from) < data.amount) {
+            return res.status(400).json({
+              error: 'Insufficient balance for staking'
+            });
+          }
+          if (data.amount < blockchain.config.minStake) {
+            return res.status(400).json({
+              error: `Minimum stake is ${blockchain.config.minStake} SAYM`
+            });
+          }
+          break;
+
+        case 'UNSTAKE':
+          if (blockchain.state.getStake(data.from) === 0) {
+            return res.status(400).json({
+              error: 'No stake to unstake'
+            });
+          }
+          if (blockchain.state.isUnstaking(data.from)) {
+            return res.status(400).json({
+              error: 'Already unstaking'
+            });
+          }
+          break;
+
+        case 'CONTRACT_DEPLOY':
+          if (data.code.length > blockchain.config.maxContractSize) {
+            return res.status(400).json({
+              error: 'Contract code too large'
+            });
+          }
+          break;
+
+        case 'CONTRACT_CALL':
+          const contract = blockchain.state.getContract(data.contractAddress);
+          if (!contract) {
+            return res.status(400).json({
+              error: 'Contract not found'
+            });
+          }
+          break;
+      }
+
+      // Add to mempool
+      blockchain.mempool.push(tx);
+
+      // Broadcast to peers
       if (p2pServer) {
         p2pServer.broadcastTransaction(tx);
       }
 
-      res.json({
+      console.log(`✓ Transaction received: ${type} from ${data.from.substring(0, 8)}...`);
+
+      const response = {
         success: true,
-        transaction: tx.toJSON()
-      });
+        txId: tx.id,
+        message: 'Transaction accepted and added to mempool'
+      };
+
+      // Add unlock block for unstake
+      if (type === 'UNSTAKE') {
+        response.unlockBlock = blockchain.chain.length + blockchain.config.unstakeDelay;
+      }
+
+      res.json(response);
+
     } catch (error) {
+      console.error('Broadcast error:', error);
       res.status(400).json({ error: error.message });
     }
   });
 
-  // Stake
-  router.post('/stake', (req, res) => {
-    try {
-      const { from, amount, privateKey } = req.body;
-
-      if (!from || !amount || !privateKey) {
-        return res.status(400).json({
-          error: 'Missing required fields'
-        });
-      }
-
-      const wallet = Wallet.import(privateKey);
-      
-      if (wallet.address !== from) {
-        return res.status(400).json({
-          error: 'Private key does not match address'
-        });
-      }
-
-      const tx = Transaction.createStake(from, parseFloat(amount));
-      tx.sign(wallet);
-
-      blockchain.addTransaction(tx, wallet.publicKey);
-      
-      if (p2pServer) {
-        p2pServer.broadcastTransaction(tx);
-      }
-
-      res.json({
-        success: true,
-        transaction: tx.toJSON()
-      });
-    } catch (error) {
-      res.status(400).json({ error: error.message });
-    }
-  });
-
-  // Unstake
-  router.post('/unstake', (req, res) => {
-    try {
-      const { from, privateKey } = req.body;
-
-      if (!from || !privateKey) {
-        return res.status(400).json({
-          error: 'Missing required fields'
-        });
-      }
-
-      const wallet = Wallet.import(privateKey);
-      
-      if (wallet.address !== from) {
-        return res.status(400).json({
-          error: 'Private key does not match address'
-        });
-      }
-
-      const tx = Transaction.createUnstake(from);
-      tx.sign(wallet);
-
-      blockchain.addTransaction(tx, wallet.publicKey);
-      
-      if (p2pServer) {
-        p2pServer.broadcastTransaction(tx);
-      }
-
-      const unlockBlock = blockchain.chain.length + blockchain.config.unstakeDelay;
-
-      res.json({
-        success: true,
-        transaction: tx.toJSON(),
-        unlockBlock
-      });
-    } catch (error) {
-      res.status(400).json({ error: error.message });
-    }
-  });
-
-  // Deploy contract
-  router.post('/deploy', (req, res) => {
-    try {
-      const { from, code, privateKey } = req.body;
-
-      if (!from || !code || !privateKey) {
-        return res.status(400).json({
-          error: 'Missing required fields'
-        });
-      }
-
-      const wallet = Wallet.import(privateKey);
-      
-      if (wallet.address !== from) {
-        return res.status(400).json({
-          error: 'Private key does not match address'
-        });
-      }
-
-      const tx = Transaction.createContractDeploy(from, code);
-      tx.sign(wallet);
-
-      blockchain.addTransaction(tx, wallet.publicKey);
-      
-      if (p2pServer) {
-        p2pServer.broadcastTransaction(tx);
-      }
-
-      res.json({
-        success: true,
-        transaction: tx.toJSON()
-      });
-    } catch (error) {
-      res.status(400).json({ error: error.message });
-    }
-  });
-
-  // Call contract
-  router.post('/call', (req, res) => {
-    try {
-      const { from, contractAddress, method, args, privateKey } = req.body;
-
-      if (!from || !contractAddress || !method || !privateKey) {
-        return res.status(400).json({
-          error: 'Missing required fields'
-        });
-      }
-
-      const wallet = Wallet.import(privateKey);
-      
-      if (wallet.address !== from) {
-        return res.status(400).json({
-          error: 'Private key does not match address'
-        });
-      }
-
-      const tx = Transaction.createContractCall(from, contractAddress, method, args || {});
-      tx.sign(wallet);
-
-      blockchain.addTransaction(tx, wallet.publicKey);
-      
-      if (p2pServer) {
-        p2pServer.broadcastTransaction(tx);
-      }
-
-      res.json({
-        success: true,
-        transaction: tx.toJSON()
-      });
-    } catch (error) {
-      res.status(400).json({ error: error.message });
-    }
-  });
-
-  // Faucet
+  // Faucet (for testing only)
   router.post('/faucet', (req, res) => {
     try {
       const { address } = req.body;

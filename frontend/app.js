@@ -15,7 +15,6 @@ function showPage(pageId) {
   });
   document.getElementById(pageId).classList.add('active');
 
-  // Update page-specific data
   if (pageId === 'validators') {
     loadValidators();
   } else if (pageId === 'explorer') {
@@ -36,7 +35,6 @@ async function updateStats() {
     document.getElementById('stat-stake').textContent = stats.totalStake + ' SAYM';
     document.getElementById('stat-mempool').textContent = stats.mempool;
 
-    // Update wallet balance if logged in
     if (currentWallet) {
       const balanceRes = await fetch(`${apiBase}/balance/${currentWallet.address}`);
       const balanceData = await balanceRes.json();
@@ -44,32 +42,51 @@ async function updateStats() {
       document.getElementById('wallet-staked').textContent = balanceData.stake + ' SAYM';
     }
 
-    // Update recent blocks on dashboard
     loadRecentBlocks();
   } catch (error) {
     console.error('Error updating stats:', error);
   }
 }
 
-// Wallet functions
-function createWallet() {
-  const wallet = generateWallet();
-  currentWallet = wallet;
-  saveWallet(wallet);
-  displayWallet();
-  showResult('wallet', 'Wallet created successfully! Save your private key securely.', 'success');
+// Wallet functions - CLIENT-SIDE GENERATION
+async function createWallet() {
+  try {
+    showLoading('Creating wallet...');
+    
+    // Generate wallet CLIENT-SIDE (never touches server)
+    const wallet = new SaymanWallet();
+    await wallet.initialize();
+    
+    currentWallet = wallet.export();
+    saveWallet(currentWallet);
+    displayWallet();
+    
+    hideLoading();
+    showResult('wallet', '✅ Wallet created CLIENT-SIDE! Your private key never left your browser. Save it securely!', 'success');
+  } catch (error) {
+    hideLoading();
+    showResult('wallet', 'Error creating wallet: ' + error.message, 'error');
+  }
 }
 
-function importWallet() {
+async function importWallet() {
   const privateKey = prompt('Enter your private key:');
   if (privateKey) {
     try {
-      const wallet = { privateKey, address: deriveAddress(privateKey) };
-      currentWallet = wallet;
-      saveWallet(wallet);
+      showLoading('Importing wallet...');
+      
+      // Import wallet CLIENT-SIDE
+      const wallet = new SaymanWallet(privateKey);
+      await wallet.initialize();
+      
+      currentWallet = wallet.export();
+      saveWallet(currentWallet);
       displayWallet();
-      showResult('wallet', 'Wallet imported successfully!', 'success');
+      
+      hideLoading();
+      showResult('wallet', '✅ Wallet imported successfully!', 'success');
     } catch (error) {
+      hideLoading();
       showResult('wallet', 'Invalid private key', 'error');
     }
   }
@@ -88,6 +105,23 @@ function toggleKey() {
   keyInput.type = keyInput.type === 'password' ? 'text' : 'password';
 }
 
+function copyAddress() {
+  const addr = document.getElementById('wallet-address');
+  addr.select();
+  document.execCommand('copy');
+  showResult('wallet', 'Address copied!', 'success');
+}
+
+function copyKey() {
+  const key = document.getElementById('wallet-key');
+  const originalType = key.type;
+  key.type = 'text';
+  key.select();
+  document.execCommand('copy');
+  key.type = originalType;
+  showResult('wallet', 'Private key copied!', 'success');
+}
+
 function saveWallet(wallet) {
   localStorage.setItem('sayman_wallet', JSON.stringify(wallet));
 }
@@ -100,29 +134,7 @@ function loadWallet() {
   }
 }
 
-function generateWallet() {
-  // Simple wallet generation (in production, use proper crypto)
-  const privateKey = Array.from({length: 64}, () => 
-    Math.floor(Math.random() * 16).toString(16)
-  ).join('');
-  
-  return {
-    privateKey,
-    address: deriveAddress(privateKey)
-  };
-}
-
-function deriveAddress(privateKey) {
-  // Simple address derivation (in production, use proper crypto)
-  let hash = 0;
-  for (let i = 0; i < privateKey.length; i++) {
-    hash = ((hash << 5) - hash) + privateKey.charCodeAt(i);
-    hash = hash & hash;
-  }
-  return Math.abs(hash).toString(16).padStart(40, '0').substring(0, 40);
-}
-
-// Send transaction
+// Send transaction - CLIENT-SIDE SIGNING
 async function sendTransaction() {
   const to = document.getElementById('send-to').value;
   const amount = parseFloat(document.getElementById('send-amount').value);
@@ -134,18 +146,43 @@ async function sendTransaction() {
   }
 
   try {
-    const from = deriveAddress(privateKey);
+    showLoading('Signing transaction...');
     
-    const res = await fetch(`${apiBase}/send`, {
+    // Create wallet from private key CLIENT-SIDE
+    const wallet = new SaymanWallet(privateKey);
+    await wallet.initialize();
+    
+    // Create transaction object
+    const txData = {
+      type: 'TRANSFER',
+      data: { from: wallet.address, to, amount },
+      timestamp: Date.now()
+    };
+    
+    // Sign CLIENT-SIDE (private key never sent!)
+    const signature = await wallet.signTransaction(txData);
+    
+    // Send ONLY signed transaction
+    const signedTx = {
+      ...txData,
+      signature,
+      publicKey: wallet.publicKey
+    };
+    
+    hideLoading();
+    showLoading('Broadcasting...');
+    
+    const res = await fetch(`${apiBase}/broadcast`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to, amount, privateKey })
+      body: JSON.stringify(signedTx)
     });
 
     const data = await res.json();
+    hideLoading();
 
     if (data.success) {
-      showResult('send', 'Transaction sent successfully!', 'success');
+      showResult('send', '✅ Transaction signed CLIENT-SIDE and broadcast!', 'success');
       document.getElementById('send-to').value = '';
       document.getElementById('send-amount').value = '';
       document.getElementById('send-key').value = '';
@@ -153,11 +190,12 @@ async function sendTransaction() {
       showResult('send', data.error || 'Transaction failed', 'error');
     }
   } catch (error) {
+    hideLoading();
     showResult('send', error.message, 'error');
   }
 }
 
-// Stake
+// Stake - CLIENT-SIDE SIGNING
 async function stakeTokens() {
   const amount = parseFloat(document.getElementById('stake-amount').value);
   const privateKey = document.getElementById('stake-key').value;
@@ -168,24 +206,46 @@ async function stakeTokens() {
   }
 
   try {
-    const from = deriveAddress(privateKey);
+    showLoading('Signing stake transaction...');
     
-    const res = await fetch(`${apiBase}/stake`, {
+    const wallet = new SaymanWallet(privateKey);
+    await wallet.initialize();
+    
+    const txData = {
+      type: 'STAKE',
+      data: { from: wallet.address, amount },
+      timestamp: Date.now()
+    };
+    
+    const signature = await wallet.signTransaction(txData);
+    
+    const signedTx = {
+      ...txData,
+      signature,
+      publicKey: wallet.publicKey
+    };
+    
+    hideLoading();
+    showLoading('Broadcasting...');
+    
+    const res = await fetch(`${apiBase}/broadcast`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, amount, privateKey })
+      body: JSON.stringify(signedTx)
     });
 
     const data = await res.json();
+    hideLoading();
 
     if (data.success) {
-      showResult('stake', 'Staked successfully!', 'success');
+      showResult('stake', '✅ Stake signed CLIENT-SIDE and broadcast!', 'success');
       document.getElementById('stake-amount').value = '';
       document.getElementById('stake-key').value = '';
     } else {
       showResult('stake', data.error || 'Staking failed', 'error');
     }
   } catch (error) {
+    hideLoading();
     showResult('stake', error.message, 'error');
   }
 }
@@ -199,24 +259,164 @@ async function unstakeTokens() {
   }
 
   try {
-    const from = deriveAddress(privateKey);
+    showLoading('Signing unstake transaction...');
     
-    const res = await fetch(`${apiBase}/unstake`, {
+    const wallet = new SaymanWallet(privateKey);
+    await wallet.initialize();
+    
+    const txData = {
+      type: 'UNSTAKE',
+      data: { from: wallet.address },
+      timestamp: Date.now()
+    };
+    
+    const signature = await wallet.signTransaction(txData);
+    
+    const signedTx = {
+      ...txData,
+      signature,
+      publicKey: wallet.publicKey
+    };
+    
+    hideLoading();
+    showLoading('Broadcasting...');
+    
+    const res = await fetch(`${apiBase}/broadcast`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, privateKey })
+      body: JSON.stringify(signedTx)
     });
 
     const data = await res.json();
+    hideLoading();
 
     if (data.success) {
-      showResult('stake', `Unstaked! Funds available at block ${data.unlockBlock}`, 'success');
+      showResult('stake', `✅ Unstake initiated! Funds available at block ${data.unlockBlock}`, 'success');
       document.getElementById('unstake-key').value = '';
     } else {
       showResult('stake', data.error || 'Unstaking failed', 'error');
     }
   } catch (error) {
+    hideLoading();
     showResult('stake', error.message, 'error');
+  }
+}
+
+// Deploy contract - CLIENT-SIDE SIGNING
+async function deployContract() {
+  const code = document.getElementById('contract-code').value;
+  const privateKey = document.getElementById('deploy-key').value;
+
+  if (!code || !privateKey) {
+    showResult('contract', 'Please fill all fields', 'error');
+    return;
+  }
+
+  try {
+    showLoading('Signing contract deployment...');
+    
+    const wallet = new SaymanWallet(privateKey);
+    await wallet.initialize();
+    
+    const txData = {
+      type: 'CONTRACT_DEPLOY',
+      data: { from: wallet.address, code },
+      timestamp: Date.now()
+    };
+    
+    const signature = await wallet.signTransaction(txData);
+    
+    const signedTx = {
+      ...txData,
+      signature,
+      publicKey: wallet.publicKey
+    };
+    
+    hideLoading();
+    showLoading('Broadcasting...');
+    
+    const res = await fetch(`${apiBase}/broadcast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(signedTx)
+    });
+
+    const data = await res.json();
+    hideLoading();
+
+    if (data.success) {
+      showResult('contract', '✅ Contract deployment signed and broadcast!', 'success');
+      document.getElementById('contract-code').value = '';
+      document.getElementById('deploy-key').value = '';
+      setTimeout(loadContracts, 6000);
+    } else {
+      showResult('contract', data.error || 'Deploy failed', 'error');
+    }
+  } catch (error) {
+    hideLoading();
+    showResult('contract', error.message, 'error');
+  }
+}
+
+// Call contract - CLIENT-SIDE SIGNING
+async function callContract() {
+  const contractAddress = document.getElementById('call-address').value;
+  const method = document.getElementById('call-method').value;
+  const argsText = document.getElementById('call-args').value;
+  const privateKey = document.getElementById('call-key').value;
+
+  if (!contractAddress || !method || !privateKey) {
+    showResult('contract', 'Please fill all fields', 'error');
+    return;
+  }
+
+  try {
+    showLoading('Signing contract call...');
+    
+    const wallet = new SaymanWallet(privateKey);
+    await wallet.initialize();
+    
+    const args = argsText ? JSON.parse(argsText) : {};
+    
+    const txData = {
+      type: 'CONTRACT_CALL',
+      data: { from: wallet.address, contractAddress, method, args },
+      timestamp: Date.now()
+    };
+    
+    const signature = await wallet.signTransaction(txData);
+    
+    const signedTx = {
+      ...txData,
+      signature,
+      publicKey: wallet.publicKey
+    };
+    
+    hideLoading();
+    showLoading('Broadcasting...');
+    
+    const res = await fetch(`${apiBase}/broadcast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(signedTx)
+    });
+
+    const data = await res.json();
+    hideLoading();
+
+    if (data.success) {
+      showResult('contract', '✅ Contract call signed and broadcast!', 'success');
+      document.getElementById('call-address').value = '';
+      document.getElementById('call-method').value = '';
+      document.getElementById('call-args').value = '';
+      document.getElementById('call-key').value = '';
+      setTimeout(() => loadContracts(), 6000);
+    } else {
+      showResult('contract', data.error || 'Call failed', 'error');
+    }
+  } catch (error) {
+    hideLoading();
+    showResult('contract', error.message, 'error');
   }
 }
 
@@ -238,8 +438,10 @@ async function loadValidators() {
       const div = document.createElement('div');
       div.className = 'validator-item';
       div.innerHTML = `
-        <span class="address">${v.address.substring(0, 16)}...</span>
-        <span class="stake">${v.stake} SAYM</span>
+        <div>
+          <span class="address">${v.address.substring(0, 20)}...</span>
+          <span class="stake">${v.stake} SAYM</span>
+        </div>
         <span>Missed: ${v.missedBlocks}</span>
       `;
       list.appendChild(div);
@@ -303,76 +505,6 @@ async function loadBlocks() {
 }
 
 // Contracts
-async function deployContract() {
-  const code = document.getElementById('contract-code').value;
-  const privateKey = document.getElementById('deploy-key').value;
-
-  if (!code || !privateKey) {
-    showResult('contract', 'Please fill all fields', 'error');
-    return;
-  }
-
-  try {
-    const from = deriveAddress(privateKey);
-    
-    const res = await fetch(`${apiBase}/deploy`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, code, privateKey })
-    });
-
-    const data = await res.json();
-
-    if (data.success) {
-      showResult('contract', 'Contract deployed successfully!', 'success');
-      document.getElementById('contract-code').value = '';
-      document.getElementById('deploy-key').value = '';
-      setTimeout(loadContracts, 6000); // Reload after next block
-    } else {
-      showResult('contract', data.error || 'Deploy failed', 'error');
-    }
-  } catch (error) {
-    showResult('contract', error.message, 'error');
-  }
-}
-
-async function callContract() {
-  const contractAddress = document.getElementById('call-address').value;
-  const method = document.getElementById('call-method').value;
-  const argsText = document.getElementById('call-args').value;
-  const privateKey = document.getElementById('call-key').value;
-
-  if (!contractAddress || !method || !privateKey) {
-    showResult('contract', 'Please fill all fields', 'error');
-    return;
-  }
-
-  try {
-    const from = deriveAddress(privateKey);
-    const args = argsText ? JSON.parse(argsText) : {};
-    
-    const res = await fetch(`${apiBase}/call`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, contractAddress, method, args, privateKey })
-    });
-
-    const data = await res.json();
-
-    if (data.success) {
-      showResult('contract', 'Contract called successfully!', 'success');
-      document.getElementById('call-address').value = '';
-      document.getElementById('call-method').value = '';
-      document.getElementById('call-args').value = '';
-      document.getElementById('call-key').value = '';
-    } else {
-      showResult('contract', data.error || 'Call failed', 'error');
-    }
-  } catch (error) {
-    showResult('contract', error.message, 'error');
-  }
-}
-
 async function loadContracts() {
   try {
     const res = await fetch(`${apiBase}/contracts`);
@@ -396,6 +528,7 @@ async function loadContracts() {
       `;
       div.onclick = () => {
         document.getElementById('call-address').value = contract.address;
+        showPage('contracts');
         window.scrollTo({ top: 0, behavior: 'smooth' });
       };
       list.appendChild(div);
@@ -405,13 +538,44 @@ async function loadContracts() {
   }
 }
 
-// Utility
+// Utility functions
 function showResult(page, message, type) {
   const resultDiv = document.getElementById(`${page}-result`);
-  resultDiv.textContent = message;
-  resultDiv.className = `result ${type}`;
-  setTimeout(() => {
-    resultDiv.textContent = '';
-    resultDiv.className = 'result';
-  }, 5000);
+  if (resultDiv) {
+    resultDiv.textContent = message;
+    resultDiv.className = `result ${type}`;
+    setTimeout(() => {
+      resultDiv.textContent = '';
+      resultDiv.className = 'result';
+    }, 5000);
+  }
+}
+
+function showLoading(message) {
+  // Simple loading indicator
+  const overlay = document.createElement('div');
+  overlay.id = 'loading-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    color: white;
+    font-size: 1.5rem;
+  `;
+  overlay.textContent = message;
+  document.body.appendChild(overlay);
+}
+
+function hideLoading() {
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) {
+    overlay.remove();
+  }
 }
