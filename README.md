@@ -1,292 +1,86 @@
-# Sayman Blockchain - Phase 3: Deterministic PoS + Smart Contracts + Client-Side Cryptography
+# Sayman Blockchain - Phase 5: Production Network + Explorer
 
-![Phase](https://img.shields.io/badge/Phase-3-blue)
+![Phase](https://img.shields.io/badge/Phase-5-blue)
 ![Status](https://img.shields.io/badge/Status-Complete-green)
-![Node](https://img.shields.io/badge/Node-v20+-green)
-![Security](https://img.shields.io/badge/Security-Client--Side-green)
+![Network](https://img.shields.io/badge/Network-Testnet%2FMainnet-orange)
 
 ## Overview
 
-Phase 3 is a **complete, production-grade blockchain architecture** that implements:
-- ✅ Deterministic state replay
-- ✅ Client-side wallet generation and signing
-- ✅ JavaScript smart contracts
-- ✅ Multi-validator Proof of Stake
-- ✅ Weighted validator selection
-- ✅ Validator rotation
-- ✅ Slashing mechanism
-- ✅ Zero-trust architecture (private keys never leave client)
+Phase 5 is the **production-ready release** of Sayman blockchain with proper network separation, full blockchain explorer, and a modern Web3-style UI.
 
-**This is a REAL blockchain implementation following Bitcoin/Ethereum architecture patterns.**
+### What's New in Phase 5
+
+#### 🌐 Network Configuration System
+- **Testnet** and **Mainnet** configurations
+- Different parameters per network
+- Chain ID validation
+- Environment-based configuration loading
+
+#### 🚰 Faucet Restriction
+- Faucet **only available on testnet**
+- Mainnet rejects faucet requests
+- Configurable faucet amounts and cooldowns
+
+#### 🔍 Blockchain Explorer
+- Search by block, transaction, or address
+- Paginated block listing
+- Transaction history per address
+- Detailed block viewer
+- Real-time updates
+
+#### 📊 Web3 Dashboard
+- Live network statistics
+- Animated counters
+- Real-time block feed
+- Validator monitoring panel
+- APR estimation
+
+#### 🎨 Modern UI
+- Dark theme by default
+- Responsive design
+- Smooth animations
+- Professional styling
+- Mobile-friendly
 
 ---
 
-## What's New in Phase 3
+## Network Configurations
 
-### 🔐 Security Architecture (CRITICAL IMPROVEMENT)
-
-#### ❌ Old Way (Phase 1 & 2 - INSECURE):
+### Testnet Configuration
 ```javascript
-// Frontend sends private key to backend
-POST /api/stake
 {
-  "privateKey": "abc123...",  // ❌ NEVER DO THIS!
-  "amount": 100
+  networkName: 'Sayman Testnet',
+  chainId: 'sayman-testnet-1',
+  blockTime: 5000,          // Fast blocks
+  blockReward: 10,          // Higher rewards
+  minStake: 100,            // Lower barrier
+  faucetEnabled: true,      // ✅ Faucet available
+  faucetAmount: 1000
 }
 ```
 
-#### ✅ New Way (Phase 3 - SECURE):
-```javascript
-// Frontend signs transaction CLIENT-SIDE
-const wallet = new SaymanWallet(privateKey);  // In browser
-const signature = await wallet.signTransaction(tx);  // Sign locally
+**Use cases:**
+- Development
+- Testing
+- Experimentation
+- Learning
 
-// Send ONLY signed transaction (no private key!)
-POST /api/broadcast
+### Mainnet Configuration
+```javascript
 {
-  "type": "STAKE",
-  "data": {...},
-  "signature": "...",  // ✅ Only signature sent
-  "publicKey": "..."   // ✅ Public key (safe to share)
+  networkName: 'Sayman Mainnet',
+  chainId: 'sayman-mainnet-1',
+  blockTime: 10000,         // Stable blocks
+  blockReward: 5,           // Conservative rewards
+  minStake: 1000,           // Higher security
+  faucetEnabled: false,     // ❌ No faucet
 }
 ```
 
-**Private keys NEVER leave your browser. This is how real blockchains work.**
-
----
-
-### 🏗️ Architectural Fixes
-
-#### 1. Deterministic State Engine
-**Problem (Phase 1/2):** State partially stored off-chain, inconsistent rebuilds.
-
-**Solution:**
-```javascript
-// All state derived from blockchain
-function rebuildState() {
-  state.clear();
-  for (block of blockchain) {
-    for (tx of block.transactions) {
-      applyTransaction(tx);  // Deterministic replay
-    }
-  }
-}
-```
-
-Every node restart produces **identical state** by replaying all blocks from genesis.
-
-#### 2. Transaction-Based Everything
-**All state changes are transactions:**
-
-| Action | Phase 1/2 | Phase 3 |
-|--------|-----------|---------|
-| Initial Supply | Runtime injection | GENESIS transaction |
-| Staking | API call | STAKE transaction |
-| Rewards | Balance manipulation | REWARD transaction |
-| Slashing | Direct state change | SLASH transaction |
-| Contracts | N/A | CONTRACT_DEPLOY/CALL transactions |
-
-#### 3. Client-Side Cryptography
-**Phase 3 uses browser-native crypto:**
-- `elliptic.js` (via CDN) for secp256k1
-- `SubtleCrypto` (native) for SHA-256
-- All signing happens in browser
-- Zero trust in backend
-
-#### 4. Single Broadcast Endpoint
-**Phase 1/2 had:**
-- `/send` (with private key)
-- `/stake` (with private key)
-- `/deploy` (with private key)
-
-**Phase 3 has:**
-- `/broadcast` (only signed transactions)
-
-**Backend can NEVER see private keys.**
-
----
-
-### 🧠 Smart Contract Engine
-
-Deterministic JavaScript VM using Node.js `vm` module:
-```javascript
-// Contract code (pure JavaScript)
-function mint(args) {
-  const { to, amount } = args;
-  state.balances = state.balances || {};
-  state.balances[to] = (state.balances[to] || 0) + amount;
-}
-
-function transfer(args) {
-  const { to, amount } = args;
-  const from = msg.sender;  // Available in contract context
-  
-  state.balances[from] -= amount;
-  state.balances[to] = (state.balances[to] || 0) + amount;
-}
-```
-
-**Sandbox restrictions:**
-- ❌ No `require()`
-- ❌ No `process`
-- ❌ No `Date` or `Math.random()` (non-deterministic)
-- ❌ No filesystem/network
-- ✅ Pure JavaScript logic
-- ✅ State persistence
-- ✅ `msg.sender` context
-
----
-
-### 🎯 Proof of Stake Features
-
-#### Validator Competition ✅
-Multiple validators compete for block production:
-```javascript
-// Weighted random selection
-Validator A: 500 SAYM → 50% chance
-Validator B: 300 SAYM → 30% chance
-Validator C: 200 SAYM → 20% chance
-```
-
-**Test:** Create 3+ validators with different stakes, watch block production.
-
-#### Weighted Selection ✅
-Higher stake = higher probability:
-```javascript
-selectValidator(lastBlockHash) {
-  totalStake = sum(all stakes);
-  randomValue = hash(lastBlockHash) % totalStake;
-  
-  cumulativeStake = 0;
-  for (validator of validators) {
-    cumulativeStake += validator.stake;
-    if (randomValue < cumulativeStake) {
-      return validator;  // Selected!
-    }
-  }
-}
-```
-
-**Test:** Validator with 500 SAYM should create ~2.5x more blocks than 200 SAYM validator.
-
-#### Slashing Scenario ✅
-Validators penalized for missing blocks:
-```javascript
-if (validator.missedBlocks >= maxMissedBlocks) {
-  slashAmount = validator.stake * slashPercentage;
-  createSlashTransaction(validator, slashAmount);
-  
-  if (validator.stake < minStake) {
-    deactivateValidator(validator);
-  }
-}
-```
-
-**Test:** Stop a validator node, watch it get slashed after 3 missed blocks.
-
-#### Rotation Logic ✅
-Prevents same validator from monopolizing:
-```javascript
-if (selectedValidator === lastValidator && validators.length > 1) {
-  // Try again with different seed
-  selectedValidator = selectWithRotation();
-}
-```
-
-**Test:** With multiple validators, blocks should alternate between them.
-
----
-
-## Architecture
-```
-┌──────────────────────────────────────────────┐
-│     Browser (Client-Side Crypto)             │
-│                                              │
-│  ┌────────────────────────────────┐         │
-│  │  elliptic.js (secp256k1)       │         │
-│  │  • Generate wallet              │         │
-│  │  • Sign transactions            │         │
-│  │  • Private key STAYS HERE       │         │
-│  └────────────────┬───────────────┘         │
-│                   │ Signed TX                │
-└───────────────────┼──────────────────────────┘
-                    │ (no private key!)
-┌───────────────────▼──────────────────────────┐
-│            Backend (Node.js)                 │
-│                                              │
-│  ┌────────────────────────────────┐         │
-│  │  POST /broadcast                │         │
-│  │  • Verify signature             │         │
-│  │  • Validate transaction         │         │
-│  │  • Add to mempool               │         │
-│  │  • NEVER sees private key       │         │
-│  └────────────────┬───────────────┘         │
-│                   │                          │
-│  ┌────────────────▼───────────────┐         │
-│  │     Blockchain Core             │         │
-│  │  • Deterministic replay         │         │
-│  │  • Block production (5s)        │         │
-│  │  • Weighted PoS selection       │         │
-│  │  • Slashing enforcement         │         │
-│  └────────────────┬───────────────┘         │
-│                   │                          │
-│  ┌────────────────▼───────────────┐         │
-│  │   Smart Contract Engine         │         │
-│  │  • JavaScript VM                │         │
-│  │  • Sandboxed execution          │         │
-│  │  • State persistence            │         │
-│  └────────────────┬───────────────┘         │
-│                   │                          │
-│  ┌────────────────▼───────────────┐         │
-│  │        P2P Network              │         │
-│  │  • Block broadcasting           │         │
-│  │  • Transaction broadcasting     │         │
-│  │  • Multi-node sync              │         │
-│  └────────────────┬───────────────┘         │
-│                   │                          │
-│  ┌────────────────▼───────────────┐         │
-│  │    LevelDB Storage              │         │
-│  │  • Blockchain persistence       │         │
-│  │  • State computed from chain    │         │
-│  └─────────────────────────────────┘         │
-└──────────────────────────────────────────────┘
-```
-
----
-
-## Project Structure
-```
-sayman-phase3/
-├── package.json              # Dependencies
-├── server.js                 # Main entry point
-├── config.js                 # Configuration
-│
-├── core/
-│   ├── blockchain.js         # ✨ Deterministic blockchain
-│   ├── block.js              # Block structure
-│   ├── transaction.js        # ✨ 8 transaction types
-│   ├── state.js              # ✨ State engine (all state derived)
-│   ├── pos.js                # ✨ Weighted PoS + rotation
-│   └── contracts.js          # ✨ JavaScript VM
-│
-├── p2p/
-│   └── server.js             # P2P networking
-│
-├── api/
-│   └── routes.js             # ✨ Single /broadcast endpoint
-│
-├── wallet/
-│   └── wallet.js             # Backend wallet (verification only)
-│
-├── frontend/
-│   ├── index.html            # ✨ Web UI
-│   ├── style.css             # Styling
-│   ├── crypto-client.js      # ✨ NEW: Client-side crypto
-│   └── app.js                # ✨ Client-side signing
-│
-└── data/                      # Database files (auto-created)
-    └── blockchain_6001/
-```
+**Use cases:**
+- Production deployments
+- Real value transactions
+- Serious applications
 
 ---
 
@@ -295,738 +89,619 @@ sayman-phase3/
 ### Prerequisites
 - Node.js v20+
 - npm v9+
-- Modern browser (Chrome, Firefox, Edge)
 
 ### Setup
 ```bash
-# Create directory
-mkdir sayman-phase3
-cd sayman-phase3
-
-# Initialize npm
-npm init -y
+# Clone or navigate to project
+cd sayman-phase5
 
 # Install dependencies
-npm install express elliptic level uuid ws
+npm install
 ```
-
-### Copy Files
-Copy all Phase 3 files to your project directory.
 
 ---
 
-## Running the Blockchain
+## Running the Network
 
-### Single Node
+### Testnet (Default)
 ```bash
-npm start
+npm run testnet
+```
+
+**Output:**
+```
+╔════════════════════════════════════════╗
+║   SAYMAN BLOCKCHAIN - PHASE 5          ║
+║   Production Network + Explorer        ║
+╚════════════════════════════════════════╝
+
+🌐 NETWORK: TESTNET
+📛 Network Name: Sayman Testnet
+🔗 Chain ID: sayman-testnet-1
+🌐 API Port: 3000
+📡 P2P Port: 6001
+⏱️  Block Time: 5000ms
+💰 Block Reward: 10 SAYM
+🎯 Min Stake: 100 SAYM
+⏳ Unstake Delay: 10 blocks
+🚰 Faucet: ENABLED ✅
+
+✅ API server running on http://localhost:3000
 ```
 
 Open browser: `http://localhost:3000`
 
-### Multi-Node Network
-
-**Terminal 1 (Bootstrap Node):**
+### Mainnet
 ```bash
-PORT=3000 P2P_PORT=6001 node server.js
+npm run mainnet
 ```
 
-**Terminal 2 (Peer Node 1):**
-```bash
-PORT=3001 P2P_PORT=6002 PEERS=ws://localhost:6001 node server.js
+**Output:**
+```
+🌐 NETWORK: MAINNET
+...
+🚰 Faucet: DISABLED ❌
 ```
 
-**Terminal 3 (Peer Node 2):**
-```bash
-PORT=3002 P2P_PORT=6003 PEERS=ws://localhost:6001 node server.js
-```
+**Important:** Faucet endpoints return 403 on mainnet.
 
-**Access:**
-- Node 1: `http://localhost:3000`
-- Node 2: `http://localhost:3001`
-- Node 3: `http://localhost:3002`
+### Multi-Node Testnet
+```bash
+# Terminal 1
+npm run node1
+
+# Terminal 2
+npm run node2
+
+# Terminal 3
+npm run node3
+```
 
 ---
 
-## Complete Testing Guide
-
-### Test 1: Client-Side Wallet Generation ✅
-
-**What to test:** Private keys never sent to server
-
-**Steps:**
-1. Open browser console (F12)
-2. Go to Network tab
-3. Click "Wallet" → "Create New Wallet"
-4. Check Network tab - **NO requests should show private key**
-
-**Expected result:**
+## Project Structure
 ```
-✓ Wallet created in browser
-✓ No API calls during creation
-✓ Private key stored in localStorage only
-✓ Server never sees private key
+sayman-phase5/
+├── config/
+│   ├── testnet.js           # ✨ Testnet configuration
+│   ├── mainnet.js           # ✨ Mainnet configuration
+│   └── index.js             # ✨ Config loader
+│
+├── core/
+│   ├── blockchain.js        # ✨ Updated with chain ID validation
+│   ├── block.js             # ✨ Chain ID support
+│   ├── transaction.js
+│   ├── state.js
+│   ├── pos.js
+│   └── contracts.js
+│
+├── api/
+│   └── routes.js            # ✨ Explorer endpoints + faucet restriction
+│
+├── frontend/
+│   ├── index.html           # ✨ Complete explorer UI
+│   ├── style.css            # ✨ Modern Web3 styling
+│   ├── app.js               # ✨ Explorer + live updates
+│   └── crypto-client.js
+│
+├── p2p/
+│   └── server.js
+│
+├── wallet/
+│   └── wallet.js
+│
+├── server.js                # ✨ Network-aware startup
+├── package.json             # ✨ New scripts
+└── README-PHASE5.md         # This file
 ```
-
-**Why this matters:** Proves zero-trust architecture.
 
 ---
 
-### Test 2: Multi-Validator Competition ✅
-
-**What to test:** Multiple validators compete for blocks
-
-**Steps:**
-```bash
-# Run the test script
-chmod +x test-real-blockchain.sh
-./test-real-blockchain.sh
-```
-
-Or manually:
-
-1. **Create 3 wallets in browser:**
-   - Wallet → Create New Wallet (×3)
-   - Save each private key
-
-2. **Fund all wallets:**
-```bash
-   curl -X POST http://localhost:3000/api/faucet \
-     -H "Content-Type: application/json" \
-     -d '{"address":"WALLET1_ADDRESS"}'
-   
-   # Repeat for WALLET2 and WALLET3
-   # Wait 6 seconds between each
-```
-
-3. **Stake different amounts:**
-   - In browser, go to "Stake" tab
-   - Wallet 1: Stake 500 SAYM
-   - Wallet 2: Stake 300 SAYM
-   - Wallet 3: Stake 200 SAYM
-
-4. **Watch block production:**
-```bash
-   # Check who creates blocks
-   curl http://localhost:3000/api/blocks | jq '.blocks[-10:] | .[].validator'
-```
-
-**Expected result:**
-```
-✓ 4 validators total (genesis + 3 new)
-✓ Blocks created by different validators
-✓ Wallet 1 (500) creates ~50% of blocks
-✓ Wallet 2 (300) creates ~30% of blocks
-✓ Wallet 3 (200) creates ~20% of blocks
-✓ Genesis creates few blocks (low stake)
-```
-
-**Why this matters:** Proves weighted Proof of Stake works correctly.
-
----
-
-### Test 3: Weighted Selection Algorithm ✅
-
-**What to test:** Higher stake = higher probability
-
-**Steps:**
-
-1. After Test 2, count blocks per validator:
-```bash
-   # Get last 100 blocks
-   curl -s http://localhost:3000/api/blocks | \
-     jq '.blocks[-100:] | group_by(.validator) | 
-     map({validator: .[0].validator, count: length})'
-```
-
-2. Calculate percentages:
-```
-   Validator 1 (500 SAYM): Should be ~50 blocks
-   Validator 2 (300 SAYM): Should be ~30 blocks
-   Validator 3 (200 SAYM): Should be ~20 blocks
-```
-
-**Expected result:**
-```
-✓ Distribution matches stake ratios
-✓ Statistical variance within ±10%
-✓ No validator gets 0 blocks
-✓ Higher stake = more blocks
-```
-
-**Why this matters:** Proves selection is weighted, not random.
-
----
-
-### Test 4: Validator Rotation ✅
-
-**What to test:** Prevents same validator twice in a row
-
-**Steps:**
-
-1. Watch consecutive blocks:
-```bash
-   # Get last 20 blocks
-   curl -s http://localhost:3000/api/blocks | \
-     jq '.blocks[-20:] | .[].validator'
-```
-
-2. Check for consecutive duplicates:
-```bash
-   # Should see alternating validators
-   validator1
-   validator2
-   validator3
-   validator1  ✓ Different from previous
-   validator2  ✓ Different from previous
-```
-
-**Expected result:**
-```
-✓ Same validator rarely appears twice in a row
-✓ If only 2 validators exist, alternation is common
-✓ With 4+ validators, very rare to repeat
-```
-
-**Why this matters:** Prevents validator monopolization.
-
----
-
-### Test 5: Slashing Mechanism ✅
-
-**What to test:** Inactive validators get penalized
-
-**Steps:**
-
-1. **Start 2-node network:**
-```bash
-   # Terminal 1
-   PORT=3000 P2P_PORT=6001 node server.js
-   
-   # Terminal 2
-   PORT=3001 P2P_PORT=6002 PEERS=ws://localhost:6001 node server.js
-```
-
-2. **Create and stake validator on Node 2:**
-```javascript
-   // In browser on http://localhost:3001
-   // 1. Create wallet
-   // 2. Get faucet
-   // 3. Stake 500 SAYM
-```
-
-3. **Verify validator is active:**
-```bash
-   curl http://localhost:3001/api/validators | jq
-```
-
-4. **Stop Node 2 (simulates validator failure):**
-```bash
-   # In Terminal 2, press Ctrl+C
-```
-
-5. **Watch Node 1 console for slashing:**
-```
-   Wait for 3 blocks (15 seconds with 5s block time)
-   
-   Expected console output:
-   ⚠ Slashed 1 validator(s)
-```
-
-6. **Check validator status:**
-```bash
-   curl http://localhost:3000/api/validators | jq
-```
-
-**Expected result:**
-```
-✓ Validator misses 3 blocks
-✓ SLASH transaction created automatically
-✓ 10% of stake slashed (50 SAYM from 500)
-✓ Validator has 450 SAYM remaining
-✓ If below minStake (100), validator deactivated
-```
-
-**Console output:**
-```
-Block #25 - Validator ABC missed
-Block #26 - Validator ABC missed (count: 2)
-Block #27 - Validator ABC missed (count: 3)
-⚠ Slashed 1 validator(s)
-SLASH transaction: validator=ABC amount=50 reason="Missed 3 blocks"
-```
-
-**Why this matters:** Proves validators can't go offline without penalty.
-
----
-
-### Test 6: Deterministic State Rebuild ✅
-
-**What to test:** State identical after restart
-
-**Steps:**
-
-1. **Record current state:**
-```bash
-   curl http://localhost:3000/api/stats > before.json
-   curl http://localhost:3000/api/validators > validators_before.json
-   curl http://localhost:3000/api/balance/WALLET_ADDRESS > balance_before.json
-```
-
-2. **Stop node:**
-```bash
-   # Press Ctrl+C
-```
-
-3. **Restart node:**
-```bash
-   npm start
-```
-
-4. **Record state after restart:**
-```bash
-   curl http://localhost:3000/api/stats > after.json
-   curl http://localhost:3000/api/validators > validators_after.json
-   curl http://localhost:3000/api/balance/WALLET_ADDRESS > balance_after.json
-```
-
-5. **Compare:**
-```bash
-   diff before.json after.json
-   diff validators_before.json validators_after.json
-   diff balance_before.json balance_after.json
-```
-
-**Expected result:**
-```
-✓ No differences in any files
-✓ Block count identical
-✓ Validator list identical
-✓ All balances identical
-✓ All stakes identical
-✓ Contract states identical
-```
-
-**Console output on restart:**
-```
-📦 Loading 150 blocks from storage...
-🔄 Replaying state from genesis...
-✓ Blockchain loaded and state rebuilt
-
-📊 Blockchain Stats:
-   Blocks: 150
-   Validators: 4
-   Total Stake: 1500 SAYM
-   Mempool: 0
-   Contracts: 2
-```
-
-**Why this matters:** Proves deterministic replay works perfectly.
-
----
-
-### Test 7: Smart Contract Deployment ✅
-
-**What to test:** Contracts deployed and executed deterministically
-
-**Steps:**
-
-1. **Deploy counter contract:**
-```javascript
-   // In browser, go to "Contracts" tab
-   
-   // Contract code:
-   function increment() {
-     state.count = (state.count || 0) + 1;
-     console.log('Count:', state.count);
-   }
-   
-   function getCount() {
-     return state.count || 0;
-   }
-```
-
-2. **Enter your private key**
-
-3. **Click "Deploy"**
-
-4. **Wait 6 seconds for block**
-
-5. **Note contract address** (shown in "Deployed Contracts")
-
-6. **Call contract 5 times:**
-```javascript
-   // In browser:
-   // Contract Address: [paste address]
-   // Method: increment
-   // Args: {}
-   // Private Key: [your key]
-   // Click "Call" (×5)
-```
-
-7. **Check contract state:**
-```bash
-   curl http://localhost:3000/api/contracts/CONTRACT_ADDRESS | jq
-```
-
-**Expected result:**
-```json
-{
-  "address": "abc123...",
-  "creator": "your_address",
-  "code": "function increment() {...}",
-  "state": {
-    "count": 5  ✓ Incremented 5 times
-  },
-  "createdAt": 1704067200000
-}
-```
-
-**Why this matters:** Proves smart contracts execute deterministically.
-
----
-
-### Test 8: Contract State Persistence ✅
-
-**What to test:** Contract state survives node restart
-
-**Steps:**
-
-1. After Test 7, record contract state:
-```bash
-   curl http://localhost:3000/api/contracts/CONTRACT_ADDRESS > contract_before.json
-```
-
-2. **Restart node:**
-```bash
-   # Ctrl+C, then npm start
-```
-
-3. **Check contract state:**
-```bash
-   curl http://localhost:3000/api/contracts/CONTRACT_ADDRESS > contract_after.json
-   diff contract_before.json contract_after.json
-```
-
-**Expected result:**
-```
-✓ No difference
-✓ count still equals 5
-✓ State fully restored from blockchain replay
-```
-
-**Why this matters:** Proves contract state is deterministically rebuilt.
-
----
-
-### Test 9: Multi-Node Smart Contract Sync ✅
-
-**What to test:** Contract state identical across nodes
-
-**Steps:**
-
-1. **Deploy contract on Node 1** (http://localhost:3000)
-
-2. **Wait 6 seconds**
-
-3. **Check on Node 2:**
-```bash
-   curl http://localhost:3001/api/contracts
-```
-
-4. **Call contract on Node 2** (different node!)
-
-5. **Check state on Node 1:**
-```bash
-   curl http://localhost:3000/api/contracts/CONTRACT_ADDRESS | jq '.state'
-```
-
-**Expected result:**
-```
-✓ Contract visible on both nodes
-✓ State changes propagate
-✓ Both nodes have identical state
-✓ Works across network
-```
-
-**Why this matters:** Proves P2P synchronization of contract state.
-
----
-
-### Test 10: Security - Private Key Never Transmitted ✅
-
-**What to test:** Private keys never leave browser
-
-**Steps:**
-
-1. **Open browser DevTools (F12)**
-
-2. **Go to Network tab**
-
-3. **Filter: "broadcast"**
-
-4. **Clear network log**
-
-5. **Send a transaction:**
-   - Go to "Send" tab
-   - Enter recipient, amount, private key
-   - Click "Send"
-
-6. **Inspect POST /api/broadcast request:**
-```json
-   Request Payload:
-   {
-     "type": "TRANSFER",
-     "data": {...},
-     "signature": "304502...",  ✓ Only signature
-     "publicKey": "04abc..."     ✓ Public key (safe)
-     // NO privateKey field!     ✓ Private key not sent
-   }
-```
-
-**Expected result:**
-```
-✓ Request contains signature
-✓ Request contains public key
-✓ Request DOES NOT contain private key
-✓ Private key visible only in browser console (if you log it)
-✓ Server receives signed transaction only
-```
-
-**Why this matters:** Proves zero-trust architecture.
-
----
-
-## Test Results Summary
-
-After running all tests, you should have proven:
-
-| Feature | Status | Evidence |
-|---------|--------|----------|
-| Client-Side Signing | ✅ | Private key not in network requests |
-| Multi-Validator | ✅ | 4+ validators active |
-| Weighted Selection | ✅ | Block distribution matches stake ratios |
-| Rotation Logic | ✅ | Same validator rarely consecutive |
-| Slashing | ✅ | Inactive validator penalized |
-| Deterministic Rebuild | ✅ | Identical state after restart |
-| Smart Contracts | ✅ | Counter increments correctly |
-| Contract Persistence | ✅ | State survives restart |
-| Multi-Node Sync | ✅ | Contract state identical across nodes |
-| Security | ✅ | Private keys never transmitted |
-
----
-
-## Configuration
-
-### config.js
-```javascript
-export default {
-  network: 'testnet',
-  port: 3000,
-  p2pPort: 6001,
-  peers: [],
-  
-  // Blockchain
-  blockTime: 5000,        // 5 seconds
-  blockReward: 10,        // 10 SAYM per block
-  
-  // Staking
-  minStake: 100,          // Minimum to become validator
-  unstakeDelay: 20,       // Blocks before withdrawal
-  maxMissedBlocks: 3,     // Slashing threshold
-  slashPercentage: 0.1,   // 10% penalty
-  
-  // Genesis
-  genesisAllocations: {
-    'faucet': 1000000,
-    'validator1': 1000
-  },
-  genesisStakes: {
-    'validator1': 500
-  },
-  
-  // Contracts
-  maxContractSize: 10000,
-  maxExecutionSteps: 1000,
-  gasLimit: 1000000
-};
-```
+## Features
+
+### 1. Network Banner
+
+Visual indication of current network:
+- **Testnet**: Yellow banner
+- **Mainnet**: Green banner
+
+Displays:
+- Network name
+- Chain ID
+
+### 2. Dashboard
+
+**Real-time statistics:**
+- Total blocks (animated counter)
+- Active validators
+- Total stake
+- Mempool size
+- Deployed contracts
+- Block reward
+- Block time
+- Estimated APR
+
+**Live block feed:**
+- Shows last 5 blocks
+- Auto-updates every 5 seconds
+- Click to view details
+
+### 3. Explorer
+
+**Search functionality:**
+- Search by block number
+- Search by block hash
+- Search by transaction ID
+- Search by address
+
+**Block viewer:**
+- Paginated block list
+- Full block details
+- Transaction breakdown
+
+**Transaction viewer:**
+- Recent transactions
+- Transaction details
+- Block association
+
+**Address viewer:**
+- Balance and stake
+- Validator status
+- Transaction history
+
+### 4. Validators Panel
+
+**Display:**
+- Total validators
+- Total stake
+- Estimated APR
+
+**Per validator:**
+- Address
+- Stake amount (with percentage)
+- Missed blocks
+- Active/Inactive status
+- Slashed status
+
+### 5. Wallet Management
+
+**Features:**
+- Create wallet (client-side)
+- Import wallet
+- View balance and stake
+- Send transactions
+- Stake/unstake
+
+**All with client-side signing** - private keys never leave browser.
+
+### 6. Smart Contracts
+
+**Features:**
+- Deploy contracts
+- Call contract methods
+- View deployed contracts
+- Inspect contract state
+
+### 7. Faucet (Testnet Only)
+
+**Testnet:**
+- Request 1000 SAYM
+- Configurable amount
+- Cooldown period (optional)
+
+**Mainnet:**
+- Returns 403 error
+- "Faucet disabled on mainnet" message
 
 ---
 
 ## API Reference
 
-### GET /api/stats
-Network statistics.
+### New Endpoints (Phase 5)
 
-### GET /api/blocks
-All blocks.
-
-### GET /api/balance/:address
-Account balance and stake.
-
-### GET /api/validators
-Active validators.
-
-### GET /api/contracts
-All deployed contracts.
-
-### GET /api/contracts/:address
-Specific contract details.
-
-### POST /api/broadcast
-**Main endpoint - accepts signed transactions only.**
-
-**Request:**
-```json
-{
-  "type": "TRANSFER|STAKE|UNSTAKE|CONTRACT_DEPLOY|CONTRACT_CALL",
-  "data": {...},
-  "timestamp": 1704067200000,
-  "signature": "304502...",
-  "publicKey": "04abc..."
-}
-```
+#### GET /api/network
+Get network configuration.
 
 **Response:**
 ```json
 {
-  "success": true,
-  "txId": "550e8400-...",
-  "message": "Transaction accepted and added to mempool"
+  "network": "Sayman Testnet",
+  "chainId": "sayman-testnet-1",
+  "faucetEnabled": true,
+  "blockTime": 5000,
+  "blockReward": 10,
+  "minStake": 100
 }
 ```
 
-### POST /api/faucet
-Request test tokens (testnet only).
+#### GET /api/blocks?page=1&limit=20
+Get paginated blocks.
+
+**Query Parameters:**
+- `page`: Page number (default: 1)
+- `limit`: Items per page (default: 50)
+
+**Response:**
+```json
+{
+  "blocks": [...],
+  "total": 150,
+  "page": 1,
+  "limit": 20,
+  "totalPages": 8
+}
+```
+
+#### GET /api/blocks/:index
+Get specific block by index.
+
+**Response:**
+```json
+{
+  "index": 0,
+  "timestamp": 1704067200000,
+  "transactions": [...],
+  "previousHash": "0",
+  "validator": "genesis",
+  "chainId": "sayman-testnet-1",
+  "hash": "abc123..."
+}
+```
+
+#### GET /api/transactions/:id
+Get transaction by ID.
+
+**Response:**
+```json
+{
+  "transaction": {...},
+  "blockIndex": 5,
+  "blockHash": "abc123...",
+  "timestamp": 1704067250000
+}
+```
+
+#### GET /api/address/:address
+Get address details with transaction history.
+
+**Response:**
+```json
+{
+  "address": "abc123...",
+  "balance": 1000,
+  "stake": 500,
+  "unstaking": false,
+  "unlockBlock": null,
+  "transactions": [...],
+  "isValidator": true,
+  "validatorInfo": {...}
+}
+```
+
+#### GET /api/search/:query
+Search blockchain by block, transaction, or address.
+
+**Response:**
+```json
+{
+  "type": "block|transaction|address",
+  "result": {...}
+}
+```
+
+### Updated Endpoints
+
+#### POST /api/faucet
+Now checks network configuration.
+
+**Testnet Response:**
+```json
+{
+  "success": true,
+  "amount": 1000,
+  "message": "1000 SAYM credited (pending in mempool)"
+}
+```
+
+**Mainnet Response (403):**
+```json
+{
+  "error": "Faucet is disabled on mainnet",
+  "message": "Faucet is only available on testnet"
+}
+```
 
 ---
 
-## Smart Contract Examples
+## Testing
 
-### Counter Contract
-```javascript
-function increment() {
-  state.count = (state.count || 0) + 1;
-}
-
-function getCount() {
-  return state.count || 0;
-}
+### Automated Test
+```bash
+chmod +x test-phase5.sh
+./test-phase5.sh
 ```
 
-### Token Contract
-```javascript
-function mint(args) {
-  const { to, amount } = args;
-  state.balances = state.balances || {};
-  state.balances[to] = (state.balances[to] || 0) + amount;
-}
+Tests:
+1. ✅ Network configuration
+2. ✅ Network detection (testnet/mainnet)
+3. ✅ Stats endpoint
+4. ✅ Faucet restriction
+5. ✅ Balance checking
+6. ✅ Address details
+7. ✅ Block pagination
+8. ✅ Single block retrieval
+9. ✅ Validators
+10. ✅ Search functionality
+11. ✅ Contracts
+12. ✅ Mempool
 
-function transfer(args) {
-  const { to, amount } = args;
-  const from = msg.sender;
-  
-  if ((state.balances[from] || 0) < amount) {
-    throw new Error('Insufficient balance');
+### Manual UI Testing
+
+1. **Dashboard Test:**
+   - Open `http://localhost:3000`
+   - Verify stats update every 3 seconds
+   - Check live block feed updates every 5 seconds
+   - Verify animated counters
+
+2. **Explorer Test:**
+   - Click "Explorer"
+   - Test search with block number: `0`
+   - Test pagination
+   - Click on a block to view details
+
+3. **Validator Test:**
+   - Click "Validators"
+   - Verify validator list loads
+   - Check stake percentages
+   - View validator details
+
+4. **Wallet Test:**
+   - Click "Wallet"
+   - Create new wallet
+   - Verify private key stays in browser (check Network tab)
+   - Import wallet with private key
+
+5. **Faucet Test (Testnet):**
+   - Click "Faucet"
+   - Enter address
+   - Claim tokens
+   - Verify balance updates
+
+6. **Mainnet Faucet Test:**
+   - Stop testnet node
+   - Run `npm run mainnet`
+   - Try to access faucet
+   - Should see "Faucet disabled" message
+   - Verify faucet nav button is hidden
+
+### Network Separation Test
+```bash
+# Test 1: Start Testnet
+npm run testnet
+# Open browser, verify yellow banner says "Sayman Testnet"
+# Try faucet - should work ✅
+
+# Test 2: Switch to Mainnet
+# Stop node (Ctrl+C)
+npm run mainnet
+# Open browser, verify green banner says "Sayman Mainnet"
+# Try faucet - should fail with 403 ❌
+
+# Test 3: Chain ID Validation
+# Start testnet node
+npm run testnet
+# In another terminal, try to connect mainnet peer
+# Should reject due to chain ID mismatch
+```
+
+---
+
+## Configuration Guide
+
+### Creating Custom Network
+
+1. **Create config file:**
+```javascript
+// config/custom.js
+export default {
+  networkName: 'My Custom Network',
+  chainId: 'custom-network-1',
+  port: 4000,
+  p2pPort: 7001,
+  blockTime: 8000,
+  blockReward: 7,
+  minStake: 500,
+  faucetEnabled: true,
+  faucetAmount: 500,
+  genesisAllocations: {
+    'faucet': 5000000,
+    'validator1': 2000
+  },
+  genesisStakes: {
+    'validator1': 1000
   }
-  
-  state.balances[from] -= amount;
-  state.balances[to] = (state.balances[to] || 0) + amount;
+};
+```
+
+2. **Add to config/index.js:**
+```javascript
+import custom from './custom.js';
+
+const configs = {
+  testnet,
+  mainnet,
+  custom  // Add here
+};
+```
+
+3. **Run:**
+```bash
+NODE_ENV=custom npm start
+```
+
+### Environment Variables
+
+Override config with environment variables:
+```bash
+# Override port
+PORT=4000 npm run testnet
+
+# Override P2P port
+P2P_PORT=7001 npm run testnet
+
+# Add peers
+PEERS=ws://peer1:6001,ws://peer2:6002 npm run testnet
+
+# Custom network
+NODE_ENV=custom PORT=4000 P2P_PORT=7001 node server.js
+```
+
+---
+
+## Differences: Testnet vs Mainnet
+
+| Feature | Testnet | Mainnet |
+|---------|---------|---------|
+| Chain ID | `sayman-testnet-1` | `sayman-mainnet-1` |
+| Block Time | 5 seconds | 10 seconds |
+| Block Reward | 10 SAYM | 5 SAYM |
+| Min Stake | 100 SAYM | 1000 SAYM |
+| Unstake Delay | 10 blocks | 100 blocks |
+| Faucet | ✅ Enabled | ❌ Disabled |
+| Initial Supply | 10M SAYM (faucet) | 1M SAYM |
+| Slash % | 5% | 10% |
+| Banner Color | Yellow | Green |
+| Use Case | Development | Production |
+
+---
+
+## Security Features
+
+### Chain ID Validation
+Prevents nodes from different networks connecting:
+```javascript
+// Block validation
+if (block.chainId !== this.chainId) {
+  throw new Error('Chain ID mismatch');
 }
 
-function balanceOf(args) {
-  return state.balances[args.address] || 0;
+// Peer connection
+if (peer.chainId !== this.chainId) {
+  reject('Wrong network');
 }
 ```
 
-### Voting Contract
+### Faucet Restriction
+Enforced at API level:
 ```javascript
-function createPoll(args) {
-  state.polls = state.polls || [];
-  state.polls.push({
-    id: state.polls.length,
-    question: args.question,
-    options: args.options,
-    votes: {},
-    creator: msg.sender
+if (!config.faucetEnabled) {
+  return res.status(403).json({
+    error: 'Faucet disabled on mainnet'
   });
 }
-
-function vote(args) {
-  const poll = state.polls[args.pollId];
-  if (poll.votes[msg.sender]) {
-    throw new Error('Already voted');
-  }
-  poll.votes[msg.sender] = args.option;
-}
 ```
 
----
-
-## Comparison with Real Blockchains
-
-### Architecture Comparison
-
-| Feature | Bitcoin | Ethereum | Sayman Phase 3 |
-|---------|---------|----------|----------------|
-| Consensus | PoW | PoS | PoS |
-| Client Signing | ✅ | ✅ | ✅ |
-| Smart Contracts | ❌ | ✅ | ✅ |
-| Deterministic | ✅ | ✅ | ✅ |
-| Language | C++ | Go | JavaScript |
-| Complexity | Very High | Very High | Low-Medium |
-
-### Security Comparison
-
-| Security Feature | Sayman Phase 3 | Production Blockchain |
-|------------------|----------------|----------------------|
-| Client-side signing | ✅ Yes | ✅ Yes |
-| Zero-trust | ✅ Yes | ✅ Yes |
-| Private keys never sent | ✅ Yes | ✅ Yes |
-| Deterministic replay | ✅ Yes | ✅ Yes |
-| Byzantine fault tolerance | ❌ No | ✅ Yes |
-| Formal verification | ❌ No | ✅ Yes (some) |
-| Economic security | ⚠️ Basic | ✅ Advanced |
-
-**Sayman Phase 3 is architecturally sound but lacks advanced security for production.**
+### Client-Side Signing
+All transactions signed in browser:
+- Private keys never transmitted
+- Server only sees signed transactions
+- Zero-trust architecture
 
 ---
 
-## Improvements Over Phase 2
+## UI Features
 
-| Feature | Phase 2 | Phase 3 |
-|---------|---------|---------|
-| Wallet Generation | Server-side | ✅ Client-side |
-| Transaction Signing | Server-side | ✅ Client-side |
-| Private Key Handling | Sent to server | ✅ Never leaves browser |
-| Endpoints | Multiple with privateKey | ✅ Single /broadcast |
-| State Management | Partially off-chain | ✅ 100% on-chain |
-| Smart Contracts | None | ✅ JavaScript VM |
-| Security | Low | ✅ High |
-| Trust Model | Trust server | ✅ Trustless |
+### Animations
+- Counter increments (scale effect)
+- Block slides (slide-in from left)
+- Card hovers (lift effect)
+- Page transitions (fade-in)
+
+### Responsive Design
+- Mobile-friendly navigation
+- Flexible grid layouts
+- Touch-optimized buttons
+- Readable on all screen sizes
+
+### Dark Theme
+- Easy on the eyes
+- Professional appearance
+- Reduced eye strain
+- Battery friendly (OLED)
+
+### Live Updates
+- Stats update every 3 seconds
+- Blocks update every 5 seconds
+- Smooth transitions
+- No page reloads needed
 
 ---
 
-## Known Limitations
+## Troubleshooting
 
-### Not Production-Ready For:
-1. **Financial applications** - No formal verification
-2. **High-value transactions** - Basic economic security
-3. **Public networks** - No Sybil attack protection
-4. **Mission-critical systems** - No Byzantine fault tolerance
+### Issue: Faucet not working
+**Solution:**
+1. Check network: `curl http://localhost:3000/api/network | jq '.faucetEnabled'`
+2. If `false`, you're on mainnet
+3. Switch to testnet: `npm run testnet`
 
-### Missing for Production:
-- Cryptographic randomness beacon
-- Advanced economic security
-- Formal verification of contracts
-- Gas system for resource limits
-- Account abstraction
-- Cross-chain bridges
-- MEV protection
-- Advanced cryptography (ZK proofs, etc.)
+### Issue: UI not updating
+**Solution:**
+1. Check browser console for errors
+2. Verify API is running: `curl http://localhost:3000/api/stats`
+3. Hard refresh: Ctrl+F5 (Windows) or Cmd+Shift+R (Mac)
 
-**However, the architecture is CORRECT and follows real blockchain patterns.**
+### Issue: Chain ID mismatch
+**Solution:**
+1. Delete database: `rm -rf data/`
+2. Restart node
+3. This rebuilds genesis with correct chain ID
+
+### Issue: Peers not connecting
+**Solution:**
+1. Check chain IDs match
+2. Verify P2P ports are open
+3. Check PEERS environment variable format
+
+---
+
+## Production Checklist
+
+Before deploying to production:
+
+- [ ] Use mainnet configuration
+- [ ] Disable faucet (verified)
+- [ ] Set appropriate min stake
+- [ ] Configure proper genesis allocations
+- [ ] Set stable block time (10s+)
+- [ ] Configure proper P2P peers
+- [ ] Set up monitoring
+- [ ] Enable HTTPS
+- [ ] Configure firewall
+- [ ] Set up backups
+- [ ] Test chain ID validation
+- [ ] Test faucet restriction
+- [ ] Verify deterministic rebuild
+- [ ] Load test network
+- [ ] Security audit
+
+---
+
+## Roadmap
+
+### Phase 5 ✅ Complete
+- Network configuration
+- Faucet restriction
+- Blockchain explorer
+- Web3 UI
+- Live updates
+
+### Future Phases (Ideas)
+- **Phase 6**: WebSocket real-time updates
+- **Phase 7**: Advanced contract features (events, logs)
+- **Phase 8**: Mobile app
+- **Phase 9**: Cross-chain bridges
+- **Phase 10**: ZK proofs
 
 ---
 
@@ -1036,27 +711,11 @@ MIT
 
 ## Version
 
-3.0.0 - Phase 3 Complete
-- Client-side cryptography ✅
-- Deterministic state ✅
-- Smart contracts ✅
-- Multi-validator PoS ✅
-- Slashing ✅
-- Zero-trust architecture ✅
+5.0.0 - Phase 5 Complete
 
 ---
 
-## Next Steps
+**Sayman Blockchain Phase 5**  
+*Production-Ready Network Separation + Explorer + Web3 UI*
 
-This is the final phase of the educational series. To make it production-ready, you would need to add:
-- Byzantine fault tolerance (BFT)
-- Economic security analysis
-- Formal verification
-- Advanced cryptography
-- Professional audit
-
-But for learning blockchain architecture, **Phase 3 is complete and correct.** 🎓
-
----
-
-**Built with ❤️ for blockchain education**
+Built with ❤️ for blockchain innovation

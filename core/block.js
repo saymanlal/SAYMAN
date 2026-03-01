@@ -8,6 +8,8 @@ class Block {
     this.transactions = transactions;
     this.previousHash = previousHash;
     this.validator = validator;
+    this.chainId = null;
+    this.gasUsed = 0;
     this.hash = this.calculateHash();
   }
 
@@ -17,9 +19,11 @@ class Block {
       .update(
         this.index +
         this.timestamp +
-        JSON.stringify(this.transactions.map(tx => tx.toJSON())) +
+        JSON.stringify(this.transactions) +
         this.previousHash +
-        this.validator
+        this.validator +
+        (this.chainId || '') +
+        this.gasUsed
       )
       .digest('hex');
   }
@@ -31,11 +35,14 @@ class Block {
       transactions: this.transactions.map(tx => tx.toJSON()),
       previousHash: this.previousHash,
       validator: this.validator,
+      chainId: this.chainId,
+      gasUsed: this.gasUsed,
       hash: this.hash
     };
   }
 
   static async fromJSON(data) {
+    const Transaction = (await import('./transaction.js')).default;
     const transactions = data.transactions.map(tx => Transaction.fromJSON(tx));
     const block = new Block(
       data.index,
@@ -44,6 +51,8 @@ class Block {
       data.validator
     );
     block.timestamp = data.timestamp;
+    block.chainId = data.chainId;
+    block.gasUsed = data.gasUsed || 0;
     block.hash = data.hash;
     return block;
   }

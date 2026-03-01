@@ -2,8 +2,9 @@ import vm from 'vm';
 import crypto from 'crypto';
 
 class ContractEngine {
-  constructor(state) {
+  constructor(state, gasCalculator) {
     this.state = state;
+    this.gas = gasCalculator;
   }
 
   generateContractAddress(creator, timestamp) {
@@ -14,12 +15,16 @@ class ContractEngine {
       .substring(0, 40);
   }
 
-  deploy(from, code, timestamp) {
+  deploy(from, code, timestamp, gasTracker) {
     const address = this.generateContractAddress(from, timestamp);
     
-    if (code.length > 10000) {
+    if (code.length > 100000) {
       throw new Error('Contract code too large');
     }
+
+    // Charge gas for code size
+    const codeGas = Math.floor(code.length / 10);
+    this.gas.chargeGas(gasTracker, codeGas);
 
     // Validate code syntax
     try {
@@ -33,78 +38,120 @@ class ContractEngine {
       creator: from,
       code,
       state: {},
-      createdAt: timestamp
+      createdAt: timestamp,
+      gasUsed: gasTracker.gasUsed
     };
 
     this.state.setContract(address, contract);
     
-    console.log(`✓ Contract deployed at ${address.substring(0, 8)}...`);
+    console.log(`✓ Contract deployed at ${address.substring(0, 8)}... (gas: ${gasTracker.gasUsed})`);
     
     return address;
   }
 
-  call(from, contractAddress, method, args) {
+  call(from, contractAddress, method, args, gasTracker, gasLimit) {
     const contract = this.state.getContract(contractAddress);
     
     if (!contract) {
       throw new Error('Contract not found');
     }
 
-    // Create sandbox context
+    // Check state size limit
+    const stateSize = JSON.stringify(contract.state).length;
+    if (stateSize > this.gas.limits.maxStateSize) {
+      throw new Error('Contract state too large');
+    }
+
+    // Create instrumented sandbox
     const sandbox = {
       state: contract.state,
-      msg: {
-        sender: from
+      msg: { sender: from },
+      gasTracker: gasTracker,
+      gasLimit: gasLimit,
+      gasCalculator: this.gas,
+      
+      // Instrumented balanceOf
+      balanceOf: (address) => {
+        this.gas.chargeGas(gasTracker, this.gas.gasCosts.STATE_READ);
+        return this.state.getBalance(address);
       },
-      balanceOf: (address) => this.state.getBalance(address),
-      transfer: (to, amount) => {
-        // This will be executed and state updated after contract execution
-        return { type: 'transfer', to, amount };
+      
+      // Instrumented state access
+      _readState: () => {
+        this.gas.chargeGas(gasTracker, this.gas.gasCosts.STATE_READ);
       },
+      
+      _writeState: () => {
+        this.gas.chargeGas(gasTracker, this.gas.gasCosts.STATE_WRITE);
+      },
+      
       console: {
         log: (...args) => {
-          // Safe console for debugging
+          this.gas.chargeGas(gasTracker, 1);
           console.log('[Contract]', ...args);
         }
       }
     };
 
+    // Wrap state access
+    const wrappedState = new Proxy(contract.state, {
+      get: (target, prop) => {
+        sandbox._readState();
+        return target[prop];
+      },
+      set: (target, prop, value) => {
+        sandbox._writeState();
+        target[prop] = value;
+        return true;
+      }
+    });
+
+    sandbox.state = wrappedState;
+
     // Create restricted context
     const context = vm.createContext(sandbox);
 
-    // Wrap contract code to expose methods
+    // Wrap contract code with gas metering
     const wrappedCode = `
-      ${contract.code}
-      
-      if (typeof ${method} === 'function') {
-        ${method}(${JSON.stringify(args)});
-      } else {
-        throw new Error('Method not found: ${method}');
-      }
+      (function() {
+        ${contract.code}
+        
+        if (typeof ${method} === 'function') {
+          return ${method}(${JSON.stringify(args)});
+        } else {
+          throw new Error('Method not found: ${method}');
+        }
+      })();
     `;
 
     try {
       // Execute with timeout
       const script = new vm.Script(wrappedCode);
-      script.runInContext(context, {
-        timeout: 1000,
+      const result = script.runInContext(context, {
+        timeout: this.gas.limits.maxExecutionTime,
         displayErrors: true
       });
 
+      // Check gas limit
+      if (gasTracker.gasUsed > gasLimit) {
+        throw new Error('Out of gas');
+      }
+
       // Update contract state
-      contract.state = sandbox.state;
+      contract.state = Object.assign({}, wrappedState);
       this.state.setContract(contractAddress, contract);
 
-      console.log(`✓ Contract ${contractAddress.substring(0, 8)}... executed ${method}()`);
+      console.log(`✓ Contract ${contractAddress.substring(0, 8)}... executed ${method}() (gas: ${gasTracker.gasUsed})`);
 
       return {
         success: true,
-        state: contract.state
+        gasUsed: gasTracker.gasUsed,
+        result: result
       };
 
     } catch (error) {
       console.error(`✗ Contract execution failed: ${error.message}`);
-      throw new Error('Contract execution failed: ' + error.message);
+      throw error;
     }
   }
 

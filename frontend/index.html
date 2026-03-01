@@ -3,154 +3,275 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sayman Blockchain</title>
+  <title>Sayman Blockchain Explorer</title>
   <link rel="stylesheet" href="style.css">
-
-  <!-- FIXED elliptic CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 </head>
 <body>
+  <!-- Network Banner -->
+  <div id="network-banner" class="network-banner">
+    <div class="container">
+      <span id="network-name">Loading...</span>
+      <span id="chain-id"></span>
+    </div>
+  </div>
+
+  <!-- Navigation -->
   <nav>
     <div class="container">
-      <h1>⛓️ SAYMAN</h1>
+      <div class="nav-brand">
+        <h1>⛓️ SAYMAN</h1>
+        <span class="version">Phase 5</span>
+      </div>
       <div class="nav-links">
-        <button onclick="showPage('dashboard')">Dashboard</button>
-        <button onclick="showPage('wallet')">Wallet</button>
-        <button onclick="showPage('send')">Send</button>
-        <button onclick="showPage('stake')">Stake</button>
-        <button onclick="showPage('validators')">Validators</button>
-        <button onclick="showPage('explorer')">Explorer</button>
-        <button onclick="showPage('contracts')">Contracts</button>
-        <button onclick="showPage('faucet')">Faucet</button>
+        <button onclick="showPage('dashboard')" class="nav-btn">📊 Dashboard</button>
+        <button onclick="showPage('explorer')" class="nav-btn">🔍 Explorer</button>
+        <button onclick="showPage('validators')" class="nav-btn">👥 Validators</button>
+        <button onclick="showPage('wallet')" class="nav-btn">👛 Wallet</button>
+        <button onclick="showPage('contracts')" class="nav-btn">📜 Contracts</button>
+        <button onclick="showPage('faucet')" class="nav-btn" id="faucet-nav">🚰 Faucet</button>
       </div>
     </div>
   </nav>
 
   <main class="container">
-
-    <!-- Dashboard -->
+    <!-- Dashboard Page -->
     <div id="dashboard" class="page active">
-      <h2>Dashboard</h2>
+      <h2>Network Dashboard</h2>
+
+      <!-- Live Stats Grid -->
       <div class="stats-grid">
         <div class="stat-card">
-          <h3 id="stat-blocks">0</h3>
-          <p>Blocks</p>
+          <div class="stat-icon">📦</div>
+          <div class="stat-content">
+            <h3 id="stat-blocks" class="stat-value">0</h3>
+            <p class="stat-label">Total Blocks</p>
+          </div>
         </div>
         <div class="stat-card">
-          <h3 id="stat-validators">0</h3>
-          <p>Validators</p>
+          <div class="stat-icon">👥</div>
+          <div class="stat-content">
+            <h3 id="stat-validators" class="stat-value">0</h3>
+            <p class="stat-label">Validators</p>
+          </div>
         </div>
         <div class="stat-card">
-          <h3 id="stat-stake">0</h3>
-          <p>Total Stake</p>
+          <div class="stat-icon">🔒</div>
+          <div class="stat-content">
+            <h3 id="stat-stake" class="stat-value">0</h3>
+            <p class="stat-label">Total Stake</p>
+          </div>
         </div>
         <div class="stat-card">
-          <h3 id="stat-mempool">0</h3>
-          <p>Mempool</p>
+          <div class="stat-icon">⏳</div>
+          <div class="stat-content">
+            <h3 id="stat-mempool" class="stat-value">0</h3>
+            <p class="stat-label">Mempool</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📜</div>
+          <div class="stat-content">
+            <h3 id="stat-contracts" class="stat-value">0</h3>
+            <p class="stat-label">Contracts</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">💰</div>
+          <div class="stat-content">
+            <h3 id="stat-reward" class="stat-value">0</h3>
+            <p class="stat-label">Block Reward</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">⏱️</div>
+          <div class="stat-content">
+            <h3 id="stat-blocktime" class="stat-value">0</h3>
+            <p class="stat-label">Block Time (s)</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📈</div>
+          <div class="stat-content">
+            <h3 id="stat-apr" class="stat-value">0%</h3>
+            <p class="stat-label">Est. APR</p>
+          </div>
         </div>
       </div>
 
+      <!-- Live Block Feed -->
       <div class="section">
-        <h3>Recent Blocks</h3>
-        <div id="recent-blocks"></div>
+        <h3>Live Block Feed</h3>
+        <div id="live-blocks" class="live-blocks"></div>
       </div>
     </div>
 
-    <!-- Wallet -->
+    <!-- Explorer Page -->
+    <div id="explorer" class="page">
+      <h2>Blockchain Explorer</h2>
+
+      <!-- Search -->
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Search by block number, hash, transaction ID, or address...">
+        <button onclick="searchBlockchain()" class="btn-primary">Search</button>
+      </div>
+      <div id="search-result" class="search-result"></div>
+
+      <!-- Tabs -->
+      <div class="explorer-tabs">
+        <button onclick="showExplorerTab('blocks')" class="tab-btn active" id="tab-blocks">Blocks</button>
+        <button onclick="showExplorerTab('transactions')" class="tab-btn" id="tab-transactions">Recent Transactions</button>
+      </div>
+
+      <!-- Blocks Tab -->
+      <div id="explorer-blocks" class="explorer-tab active">
+        <div id="blocks-list"></div>
+        <div class="pagination" id="blocks-pagination"></div>
+      </div>
+
+      <!-- Transactions Tab -->
+      <div id="explorer-transactions" class="explorer-tab">
+        <div id="transactions-list"></div>
+      </div>
+    </div>
+
+    <!-- Validators Page -->
+    <div id="validators" class="page">
+      <h2>Validator Network</h2>
+
+      <!-- Validator Stats -->
+      <div class="validator-stats">
+        <div class="stat-box">
+          <h4>Total Validators</h4>
+          <p id="total-validators">0</p>
+        </div>
+        <div class="stat-box">
+          <h4>Total Stake</h4>
+          <p id="total-stake-val">0 SAYM</p>
+        </div>
+        <div class="stat-box">
+          <h4>Estimated APR</h4>
+          <p id="validator-apr">0%</p>
+        </div>
+      </div>
+
+      <!-- Validators List -->
+      <div id="validators-list"></div>
+    </div>
+
+    <!-- Wallet Page -->
     <div id="wallet" class="page">
-      <h2>Wallet</h2>
-      <div class="section">
+      <h2>Wallet Management</h2>
+      
+      <div class="wallet-actions">
         <button onclick="createWallet()" class="btn-primary">Create New Wallet</button>
         <button onclick="importWallet()" class="btn-secondary">Import Wallet</button>
       </div>
 
-      <div id="wallet-info" class="section hidden">
+      <div id="wallet-info" class="wallet-info hidden">
         <h3>Your Wallet</h3>
-        <div class="info-box">
+        <div class="info-group">
           <label>Address:</label>
-          <input type="text" id="wallet-address" readonly>
-          <button onclick="copyAddress()">Copy</button>
+          <div class="input-with-btn">
+            <input type="text" id="wallet-address" readonly>
+            <button onclick="copyAddress()" class="btn-copy">Copy</button>
+          </div>
         </div>
-        <div class="info-box">
+        <div class="info-group">
           <label>Private Key:</label>
-          <input type="password" id="wallet-key" readonly>
-          <button onclick="toggleKey()">Show</button>
-          <button onclick="copyKey()">Copy</button>
+          <div class="input-with-btn">
+            <input type="password" id="wallet-key" readonly>
+            <button onclick="toggleKey()" class="btn-toggle">Show</button>
+            <button onclick="copyKey()" class="btn-copy">Copy</button>
+          </div>
         </div>
-        <div class="info-box">
-          <label>Balance:</label>
-          <span id="wallet-balance">0 SAYM</span>
-        </div>
-        <div class="info-box">
-          <label>Staked:</label>
-          <span id="wallet-staked">0 SAYM</span>
+        <div class="balance-grid">
+          <div class="balance-card">
+            <h4>Balance</h4>
+            <p id="wallet-balance">0 SAYM</p>
+          </div>
+          <div class="balance-card">
+            <h4>Staked</h4>
+            <p id="wallet-staked">0 SAYM</p>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Send -->
-    <div id="send" class="page">
-      <h2>Send SAYM</h2>
+      <!-- Send Form -->
       <div class="form-section">
+        <h3>Send SAYM</h3>
         <input type="text" id="send-to" placeholder="Recipient Address">
         <input type="number" id="send-amount" placeholder="Amount">
         <input type="password" id="send-key" placeholder="Your Private Key">
-        <button onclick="sendTransaction()" class="btn-primary">Send</button>
+        <button onclick="sendTransaction()" class="btn-primary">Send Transaction</button>
+        <div id="send-result" class="result"></div>
       </div>
-      <div id="send-result" class="result"></div>
-    </div>
 
-    <!-- Stake -->
-    <div id="stake" class="page">
-      <h2>Staking</h2>
+      <!-- Stake Form -->
       <div class="form-section">
         <h3>Stake SAYM</h3>
-        <input type="number" id="stake-amount" placeholder="Amount to Stake (min 100)">
+        <input type="number" id="stake-amount" placeholder="Amount to Stake">
         <input type="password" id="stake-key" placeholder="Your Private Key">
         <button onclick="stakeTokens()" class="btn-primary">Stake</button>
-      </div>
-
-      <div class="form-section">
-        <h3>Unstake</h3>
+        
+        <h3 style="margin-top: 2rem;">Unstake</h3>
         <input type="password" id="unstake-key" placeholder="Your Private Key">
         <button onclick="unstakeTokens()" class="btn-secondary">Unstake</button>
+        <div id="stake-result" class="result"></div>
       </div>
-      <div id="stake-result" class="result"></div>
     </div>
 
-    <!-- Faucet -->
-    <div id="faucet" class="page">
-      <h2>Testnet Faucet</h2>
-
-      <div class="form-section">
-        <input type="text" id="faucet-address" placeholder="Paste Wallet Address">
-        <button onclick="claimFaucet()" class="btn-primary">
-          Claim 1000 SAYM
-        </button>
-      </div>
-
-      <div id="faucet-result" class="result"></div>
-    </div>
-
-    <!-- Validators -->
-    <div id="validators" class="page">
-      <h2>Validators</h2>
-      <div id="validators-list"></div>
-    </div>
-
-    <!-- Explorer -->
-    <div id="explorer" class="page">
-      <h2>Block Explorer</h2>
-      <div id="blocks-list"></div>
-    </div>
-
-    <!-- Contracts -->
+    <!-- Contracts Page -->
     <div id="contracts" class="page">
       <h2>Smart Contracts</h2>
-      <div id="contracts-list"></div>
+
+      <!-- Deploy Contract -->
+      <div class="form-section">
+        <h3>Deploy Contract</h3>
+        <textarea id="contract-code" placeholder="JavaScript contract code" rows="10"></textarea>
+        <input type="password" id="deploy-key" placeholder="Your Private Key">
+        <button onclick="deployContract()" class="btn-primary">Deploy Contract</button>
+      </div>
+
+      <!-- Call Contract -->
+      <div class="form-section">
+        <h3>Call Contract</h3>
+        <input type="text" id="call-address" placeholder="Contract Address">
+        <input type="text" id="call-method" placeholder="Method Name">
+        <textarea id="call-args" placeholder='Arguments (JSON, e.g. {"amount": 100})' rows="3"></textarea>
+        <input type="password" id="call-key" placeholder="Your Private Key">
+        <button onclick="callContract()" class="btn-primary">Call Contract</button>
+        <div id="contract-result" class="result"></div>
+      </div>
+
+      <!-- Deployed Contracts -->
+      <div class="section">
+        <h3>Deployed Contracts</h3>
+        <div id="contracts-list"></div>
+      </div>
     </div>
 
+    <!-- Faucet Page -->
+    <div id="faucet" class="page">
+      <h2>Testnet Faucet</h2>
+      <div class="faucet-notice" id="faucet-notice">
+        <p>⚠️ Faucet is only available on testnet</p>
+      </div>
+      <div class="form-section">
+        <input type="text" id="faucet-address" placeholder="Paste your wallet address">
+        <button onclick="claimFaucet()" class="btn-primary">Claim Tokens</button>
+        <div id="faucet-result" class="result"></div>
+      </div>
+    </div>
   </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>Sayman Blockchain Phase 5 - Production-Ready Network</p>
+      <p>Network: <span id="footer-network">...</span> | Chain ID: <span id="footer-chain">...</span></p>
+    </div>
+  </footer>
 
   <script src="crypto-client.js"></script>
   <script src="app.js"></script>

@@ -3,18 +3,26 @@ import Transaction from './transaction.js';
 import StateEngine from './state.js';
 import ProofOfStake from './pos.js';
 import ContractEngine from './contracts.js';
+import GasCalculator from './gas.js';
 import { Level } from 'level';
 
 class Blockchain {
   constructor(config) {
     this.config = config;
+    this.chainId = config.chainId;
     this.chain = [];
     this.mempool = [];
     this.state = new StateEngine();
     this.pos = new ProofOfStake(this.state, config);
-    this.contracts = new ContractEngine(this.state);
-    this.db = new Level(`./data/blockchain_${config.p2pPort}`, { valueEncoding: 'json' });
+    this.gas = new GasCalculator(config);
+    this.contracts = new ContractEngine(this.state, this.gas);
+    this.db = new Level(`./data/${config.chainId}_${config.p2pPort}`, { valueEncoding: 'json' });
     this.isProducing = false;
+    
+    // Anti-spam
+    this.mempoolLimit = 1000;
+    this.addressTxCount = new Map(); // address -> tx count in last minute
+    this.lastCleanup = Date.now();
   }
 
   async initialize() {
@@ -24,17 +32,20 @@ class Blockchain {
       if (savedChain && savedChain.length > 0) {
         console.log(`📦 Loading ${savedChain.length} blocks from storage...`);
         
-        // Load blocks
+        const genesisBlock = savedChain[0];
+        if (genesisBlock.chainId && genesisBlock.chainId !== this.chainId) {
+          throw new Error(`Chain ID mismatch! Expected ${this.chainId}, got ${genesisBlock.chainId}`);
+        }
+        
         for (const blockData of savedChain) {
           const block = await Block.fromJSON(blockData);
           this.chain.push(block);
         }
 
-        // Replay state from genesis
         console.log('🔄 Replaying state from genesis...');
         this.replayState();
         
-        console.log('✓ Blockchain loaded and state rebuilt');
+        console.log('✅ Blockchain loaded and state rebuilt');
       } else {
         console.log('🎬 Creating genesis block...');
         this.createGenesisBlock();
@@ -57,30 +68,26 @@ class Blockchain {
   createGenesisBlock() {
     const transactions = [];
 
-    // Genesis allocations
     for (const [address, amount] of Object.entries(this.config.genesisAllocations)) {
       const tx = new Transaction('GENESIS', { to: address, amount });
       transactions.push(tx);
     }
 
-    // Genesis stakes
     for (const [address, amount] of Object.entries(this.config.genesisStakes)) {
       const tx = new Transaction('STAKE', { from: address, amount });
       transactions.push(tx);
     }
 
     const genesisBlock = new Block(0, transactions, '0', 'genesis');
+    genesisBlock.chainId = this.chainId;
     this.chain.push(genesisBlock);
 
-    // Apply genesis state
     this.applyBlock(genesisBlock);
   }
 
   replayState() {
-    // Clear all state
     this.state.clear();
 
-    // Replay all blocks from genesis
     for (const block of this.chain) {
       this.applyBlock(block);
     }
@@ -94,45 +101,57 @@ class Blockchain {
 
   applyTransaction(tx, blockIndex) {
     try {
+      // Increment nonce for user transactions
+      if (tx.type !== 'GENESIS' && tx.type !== 'REWARD' && tx.type !== 'REWARD_FEE' && tx.type !== 'SLASH') {
+        this.state.incrementNonce(tx.data.from);
+      }
+
       switch (tx.type) {
         case 'GENESIS':
           this.state.addBalance(tx.data.to, tx.data.amount);
           break;
 
         case 'TRANSFER':
-          this.state.subtractBalance(tx.data.from, tx.data.amount);
+          // Deduct gas cost
+          const transferGasCost = tx.gasUsed * tx.gasPrice;
+          this.state.subtractBalance(tx.data.from, tx.data.amount + transferGasCost);
           this.state.addBalance(tx.data.to, tx.data.amount);
           break;
 
         case 'STAKE':
-          this.state.subtractBalance(tx.data.from, tx.data.amount);
+          const stakeGasCost = tx.gasUsed * tx.gasPrice;
+          this.state.subtractBalance(tx.data.from, tx.data.amount + stakeGasCost);
           this.state.addStake(tx.data.from, tx.data.amount);
           this.state.resetMissedBlocks(tx.data.from);
           break;
 
         case 'UNSTAKE':
+          const unstakeGasCost = tx.gasUsed * tx.gasPrice;
+          this.state.subtractBalance(tx.data.from, unstakeGasCost);
           const stakeAmount = this.state.getStake(tx.data.from);
           const unlockBlock = blockIndex + this.config.unstakeDelay;
           this.state.setStake(tx.data.from, 0);
           this.state.initiateUnstake(tx.data.from, unlockBlock);
-          // Funds locked until unlockBlock
           break;
 
         case 'REWARD':
           this.state.addBalance(tx.data.to, tx.data.amount);
           break;
 
+        case 'REWARD_FEE':
+          this.state.addBalance(tx.data.to, tx.data.amount);
+          break;
+
         case 'CONTRACT_DEPLOY':
-          this.contracts.deploy(tx.data.from, tx.data.code, tx.timestamp);
+          const deployGasCost = tx.gasUsed * tx.gasPrice;
+          this.state.subtractBalance(tx.data.from, deployGasCost);
+          // Contract already deployed during execution
           break;
 
         case 'CONTRACT_CALL':
-          this.contracts.call(
-            tx.data.from,
-            tx.data.contractAddress,
-            tx.data.method,
-            tx.data.args
-          );
+          const callGasCost = tx.gasUsed * tx.gasPrice;
+          this.state.subtractBalance(tx.data.from, callGasCost);
+          // Contract already executed
           break;
 
         case 'SLASH':
@@ -146,6 +165,18 @@ class Blockchain {
   }
 
   addTransaction(tx, publicKey) {
+    // Anti-spam: Check mempool size
+    if (this.mempool.length >= this.mempoolLimit) {
+      throw new Error('Mempool full. Try again later.');
+    }
+
+    // Anti-spam: Rate limit per address
+    this.cleanupRateLimit();
+    const addressCount = this.addressTxCount.get(tx.data.from) || 0;
+    if (addressCount >= 10) { // Max 10 tx per minute per address
+      throw new Error('Rate limit exceeded. Please wait.');
+    }
+
     // Store public key
     if (tx.data.from) {
       this.state.setPublicKey(tx.data.from, publicKey);
@@ -156,17 +187,34 @@ class Blockchain {
       throw new Error('Invalid transaction signature');
     }
 
-    // Validate based on type
+    // Validate nonce
+    const expectedNonce = this.state.getNonce(tx.data.from);
+    if (tx.nonce !== expectedNonce) {
+      throw new Error(`Invalid nonce. Expected: ${expectedNonce}, Got: ${tx.nonce}`);
+    }
+
+    // Validate gas parameters
+    this.gas.validateGasParams(tx);
+
+    // Calculate minimum gas
+    const minGas = this.gas.calculateTransactionGas(tx);
+    if (tx.gasLimit < minGas) {
+      throw new Error(`Gas limit too low. Minimum: ${minGas}`);
+    }
+
+    // Check balance covers gas cost
+    const maxGasCost = tx.gasLimit * tx.gasPrice;
+    
     switch (tx.type) {
       case 'TRANSFER':
-        if (this.state.getBalance(tx.data.from) < tx.data.amount) {
-          throw new Error('Insufficient balance');
+        if (this.state.getBalance(tx.data.from) < (tx.data.amount + maxGasCost)) {
+          throw new Error('Insufficient balance for transfer + gas');
         }
         break;
 
       case 'STAKE':
-        if (this.state.getBalance(tx.data.from) < tx.data.amount) {
-          throw new Error('Insufficient balance for staking');
+        if (this.state.getBalance(tx.data.from) < (tx.data.amount + maxGasCost)) {
+          throw new Error('Insufficient balance for staking + gas');
         }
         if (tx.data.amount < this.config.minStake) {
           throw new Error(`Minimum stake is ${this.config.minStake} SAYM`);
@@ -174,6 +222,9 @@ class Blockchain {
         break;
 
       case 'UNSTAKE':
+        if (this.state.getBalance(tx.data.from) < maxGasCost) {
+          throw new Error('Insufficient balance for gas');
+        }
         if (this.state.getStake(tx.data.from) === 0) {
           throw new Error('No stake to unstake');
         }
@@ -181,10 +232,28 @@ class Blockchain {
           throw new Error('Already unstaking');
         }
         break;
+
+      case 'CONTRACT_DEPLOY':
+      case 'CONTRACT_CALL':
+        if (this.state.getBalance(tx.data.from) < maxGasCost) {
+          throw new Error('Insufficient balance for gas');
+        }
+        break;
     }
 
     // Add to mempool
     this.mempool.push(tx);
+
+    // Update rate limit counter
+    this.addressTxCount.set(tx.data.from, addressCount + 1);
+  }
+
+  cleanupRateLimit() {
+    const now = Date.now();
+    if (now - this.lastCleanup > 60000) { // Every minute
+      this.addressTxCount.clear();
+      this.lastCleanup = now;
+    }
   }
 
   async createBlock() {
@@ -199,13 +268,59 @@ class Blockchain {
       const validator = this.pos.selectValidator(lastBlock.hash);
 
       if (!validator) {
-        console.log('⚠ No validators available');
         this.isProducing = false;
         return null;
       }
 
-      // Get pending transactions
-      const transactions = [...this.mempool];
+      const transactions = [];
+      let blockGasUsed = 0;
+
+      // Process mempool transactions
+      for (const tx of this.mempool) {
+        try {
+          // Execute transaction to calculate actual gas
+          const gasTracker = this.gas.trackExecution();
+          
+          if (tx.type === 'CONTRACT_DEPLOY') {
+            this.contracts.deploy(tx.data.from, tx.data.code, tx.timestamp, gasTracker);
+          } else if (tx.type === 'CONTRACT_CALL') {
+            this.contracts.call(
+              tx.data.from,
+              tx.data.contractAddress,
+              tx.data.method,
+              tx.data.args,
+              gasTracker,
+              tx.gasLimit
+            );
+          } else {
+            // Simple transactions
+            const minGas = this.gas.calculateTransactionGas(tx);
+            gasTracker.gasUsed = minGas;
+          }
+
+          // Check if exceeds block gas limit
+          if (blockGasUsed + gasTracker.gasUsed > this.gas.limits.maxGasPerBlock) {
+            continue; // Skip this tx, try next
+          }
+
+          tx.gasUsed = gasTracker.gasUsed;
+          transactions.push(tx);
+          blockGasUsed += gasTracker.gasUsed;
+
+          // Create gas fee reward for validator
+          const gasFee = tx.gasUsed * tx.gasPrice;
+          if (gasFee > 0) {
+            const feeReward = Transaction.createRewardFee(validator, gasFee);
+            transactions.push(feeReward);
+          }
+
+        } catch (error) {
+          console.log(`⚠ Transaction ${tx.id.substring(0, 8)} failed: ${error.message}`);
+          // Skip failed transaction
+        }
+      }
+
+      // Clear processed transactions from mempool
       this.mempool = [];
 
       // Add block reward
@@ -230,6 +345,9 @@ class Blockchain {
         lastBlock.hash,
         validator
       );
+      
+      block.chainId = this.chainId;
+      block.gasUsed = blockGasUsed;
 
       // Apply block to state
       this.applyBlock(block);
@@ -243,9 +361,7 @@ class Blockchain {
       // Save
       await this.saveChain();
 
-      console.log(`✓ Block #${block.index} created by ${validator.substring(0, 8)}...`);
-      console.log(`  Transactions: ${block.transactions.length}`);
-      console.log(`  Hash: ${block.hash.substring(0, 16)}...`);
+      console.log(`✅ Block #${block.index} | Validator: ${validator.substring(0, 8)}... | Txs: ${block.transactions.length} | Gas: ${blockGasUsed} | Reward: ${this.config.blockReward} SAYM`);
 
       this.isProducing = false;
       return block;
@@ -259,6 +375,11 @@ class Blockchain {
 
   async replaceChain(newChain) {
     if (newChain.length <= this.chain.length) {
+      return false;
+    }
+
+    if (newChain[0].chainId && newChain[0].chainId !== this.chainId) {
+      console.log(`❌ Rejecting chain from different network (${newChain[0].chainId})`);
       return false;
     }
 
@@ -291,6 +412,11 @@ class Blockchain {
       if (currentBlock.hash !== currentBlock.calculateHash()) {
         return false;
       }
+
+      // Validate gas limits
+      if (currentBlock.gasUsed > this.gas.limits.maxGasPerBlock) {
+        return false;
+      }
     }
 
     return true;
@@ -306,23 +432,36 @@ class Blockchain {
   }
 
   getStats() {
+    const validators = this.state.getValidators();
+    const totalRewards = validators.reduce((sum, v) => sum + (v.totalRewards || 0), 0);
+    
     return {
+      network: this.config.networkName,
+      chainId: this.chainId,
       blocks: this.chain.length,
-      validators: this.state.getValidators().length,
+      validators: validators.length,
       totalStake: this.state.getTotalStake(),
       mempool: this.mempool.length,
-      contracts: this.state.getAllContracts().length
+      contracts: this.state.getAllContracts().length,
+      blockReward: this.config.blockReward,
+      blockTime: this.config.blockTime,
+      totalRewards: totalRewards,
+      gasLimits: this.gas.limits,
+      gasCosts: this.gas.gasCosts
     };
   }
 
   printStats() {
     const stats = this.getStats();
     console.log('\n📊 Blockchain Stats:');
+    console.log(`   Network: ${stats.network}`);
+    console.log(`   Chain ID: ${stats.chainId}`);
     console.log(`   Blocks: ${stats.blocks}`);
     console.log(`   Validators: ${stats.validators}`);
     console.log(`   Total Stake: ${stats.totalStake} SAYM`);
     console.log(`   Mempool: ${stats.mempool}`);
-    console.log(`   Contracts: ${stats.contracts}\n`);
+    console.log(`   Contracts: ${stats.contracts}`);
+    console.log(`   Min Gas Price: ${this.gas.limits.minGasPrice}\n`);
   }
 
   async close() {
