@@ -1,9 +1,0 @@
-{
-    "network": "mainnet",
-    "port": 3000,
-    "initialSupply": 1000000,
-    "blockTime": 10000,
-    "minStake": 100,
-    "genesisValidator": "genesis",
-    "faucetEnabled": false
-  }
