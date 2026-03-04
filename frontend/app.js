@@ -912,3 +912,161 @@ function showNotification(message) {
     notification.remove();
   }, 3000);
 }
+
+// ... (existing code from Part 2)
+
+// Gas estimation helper
+async function estimateGas(type, data) {
+  try {
+    const res = await fetch(`${apiBase}/estimate-gas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, data })
+    });
+    return await res.json();
+  } catch (error) {
+    console.error('Gas estimation error:', error);
+    return { estimatedGas: 50000, recommendedGasLimit: 60000, minGasPrice: 1 };
+  }
+}
+
+// Update sendTransaction to include gas (replace existing)
+async function sendTransaction() {
+  const to = document.getElementById('send-to').value;
+  const amount = parseFloat(document.getElementById('send-amount').value);
+  const privateKey = document.getElementById('send-key').value;
+
+  if (!to || !amount || !privateKey) {
+    showResult('send', 'Please fill all fields', 'error');
+    return;
+  }
+
+  try {
+    showLoading('Estimating gas...');
+    
+    const wallet = new SaymanWallet(privateKey);
+    await wallet.initialize();
+    
+    // Get nonce
+    const addressData = await fetch(`${apiBase}/address/${wallet.address}`);
+    const { nonce } = await addressData.json();
+    
+    // Estimate gas
+    const gasEstimate = await estimateGas('TRANSFER', { from: wallet.address, to, amount });
+    
+    hideLoading();
+    showLoading('Signing transaction...');
+    
+    const txData = {
+      type: 'TRANSFER',
+      data: { from: wallet.address, to, amount },
+      timestamp: Date.now(),
+      gasLimit: gasEstimate.recommendedGasLimit,
+      gasPrice: gasEstimate.minGasPrice,
+      nonce: nonce
+    };
+    
+    const signature = await wallet.signTransaction(txData);
+    
+    const signedTx = {
+      ...txData,
+      signature: signature,
+      publicKey: wallet.publicKey
+    };
+    
+    hideLoading();
+    showLoading('Broadcasting...');
+    
+    const res = await fetch(`${apiBase}/broadcast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(signedTx)
+    });
+
+    const data = await res.json();
+    hideLoading();
+
+    if (data.success) {
+      showResult('send', `✅ Transaction broadcast! Gas: ${data.gasLimit} @ ${data.gasPrice} (Max cost: ${data.maxGasCost})`, 'success');
+      document.getElementById('send-to').value = '';
+      document.getElementById('send-amount').value = '';
+      document.getElementById('send-key').value = '';
+      updateStats();
+    } else {
+      showResult('send', data.error || 'Transaction failed', 'error');
+    }
+  } catch (error) {
+    hideLoading();
+    showResult('send', error.message, 'error');
+  }
+}
+
+// Update stakeTokens with gas (replace existing)
+async function stakeTokens() {
+  const amount = parseFloat(document.getElementById('stake-amount').value);
+  const privateKey = document.getElementById('stake-key').value;
+
+  if (!amount || !privateKey) {
+    showResult('stake', 'Please fill all fields', 'error');
+    return;
+  }
+
+  try {
+    showLoading('Estimating gas...');
+    
+    const wallet = new SaymanWallet(privateKey);
+    await wallet.initialize();
+    
+    const addressData = await fetch(`${apiBase}/address/${wallet.address}`);
+    const { nonce } = await addressData.json();
+    
+    const gasEstimate = await estimateGas('STAKE', { from: wallet.address, amount });
+    
+    hideLoading();
+    showLoading('Signing stake transaction...');
+    
+    const txData = {
+      type: 'STAKE',
+      data: { from: wallet.address, amount },
+      timestamp: Date.now(),
+      gasLimit: gasEstimate.recommendedGasLimit,
+      gasPrice: gasEstimate.minGasPrice,
+      nonce: nonce
+    };
+    
+    const signature = await wallet.signTransaction(txData);
+    
+    const signedTx = {
+      ...txData,
+      signature: signature,
+      publicKey: wallet.publicKey
+    };
+    
+    hideLoading();
+    showLoading('Broadcasting...');
+    
+    const res = await fetch(`${apiBase}/broadcast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(signedTx)
+    });
+
+    const data = await res.json();
+    hideLoading();
+
+    if (data.success) {
+      showResult('stake', `✅ Stake broadcast! Gas: ${data.gasLimit} (Max cost: ${data.maxGasCost})`, 'success');
+      document.getElementById('stake-amount').value = '';
+      document.getElementById('stake-key').value = '';
+      updateStats();
+    } else {
+      showResult('stake', data.error || 'Staking failed', 'error');
+    }
+  } catch (error) {
+    hideLoading();
+    showResult('stake', error.message, 'error');
+  }
+}
+
+// Similar updates for unstakeTokens, deployContract, callContract...
+// (Apply same pattern: fetch nonce, estimate gas, include in txData)

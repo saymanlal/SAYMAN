@@ -1,7 +1,7 @@
 {
-  "name": "sayman",
-  "version": "5.0.0",
-  "description": "Sayman Phase 5 - Production Network + Explorer",
+  "name": "sayman-blockchain",
+  "version": "6.0.0",
+  "description": "Sayman Phase 6 - Gas Model + Execution Limits + Anti-Spam + CLI",
   "main": "server.js",
   "type": "module",
   "scripts": {
@@ -10,17 +10,27 @@
     "mainnet": "NODE_ENV=mainnet node server.js",
     "node1": "NODE_ENV=testnet PORT=3000 P2P_PORT=6001 node server.js",
     "node2": "NODE_ENV=testnet PORT=3001 P2P_PORT=6002 PEERS=ws://localhost:6001 node server.js",
-    "node3": "NODE_ENV=testnet PORT=3002 P2P_PORT=6003 PEERS=ws://localhost:6001,ws://localhost:6002 node server.js"
+    "node3": "NODE_ENV=testnet PORT=3002 P2P_PORT=6003 PEERS=ws://localhost:6001,ws://localhost:6002 node server.js",
+    "docs": "node scripts/generateDocs.js",
+    "install-cli": "cd cli && npm install && npm link"
   },
-  "keywords": ["blockchain", "cryptocurrency", "proof-of-stake", "smart-contracts", "explorer"],
+  "keywords": [
+    "blockchain",
+    "cryptocurrency",
+    "proof-of-stake",
+    "smart-contracts",
+    "gas-model",
+    "cli"
+  ],
   "author": "Sayman Blockchain Team",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "express": "^4.18.2",
     "elliptic": "^6.5.4",
     "level": "^8.0.0",
     "uuid": "^9.0.0",
-    "ws": "^8.14.2"
+    "ws": "^8.14.2",
+    "node-fetch": "^3.3.2"
   },
   "engines": {
     "node": ">=20.0.0"
