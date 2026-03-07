@@ -1,36 +1,52 @@
 {
   "name": "sayman-blockchain",
-  "version": "6.0.0",
-  "description": "Sayman Phase 6 - Gas Model + Execution Limits + Anti-Spam + CLI",
+  "version": "7.0.0",
+  "description": "Sayman Phase 7 - Public Network + Real P2P + Multi-Node",
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "NODE_ENV=testnet node server.js",
-    "testnet": "NODE_ENV=testnet node server.js",
-    "mainnet": "NODE_ENV=mainnet node server.js",
-    "node1": "NODE_ENV=testnet PORT=3000 P2P_PORT=6001 node server.js",
-    "node2": "NODE_ENV=testnet PORT=3001 P2P_PORT=6002 PEERS=ws://localhost:6001 node server.js",
-    "node3": "NODE_ENV=testnet PORT=3002 P2P_PORT=6003 PEERS=ws://localhost:6001,ws://localhost:6002 node server.js",
+    "start": "node server.js",
+    "testnet": "node server.js --network testnet",
+    "mainnet": "node server.js --network mainnet",
+    "public-testnet": "node server.js --network public-testnet",
+    "validator": "node server.js --mode validator",
+    "fullnode": "node server.js --mode fullnode",
+    "observer": "node server.js --mode observer",
+    "public-validator": "node server.js --network public-testnet --mode validator",
+    "public-fullnode": "node server.js --network public-testnet --mode fullnode",
+    "node1": "PORT=3000 P2P_PORT=6001 node server.js --mode validator",
+    "node2": "PORT=3001 P2P_PORT=6002 node server.js --mode fullnode --bootstrap localhost:6001",
+    "node3": "PORT=3002 P2P_PORT=6003 node server.js --mode observer --bootstrap localhost:6001,localhost:6002",
+    "faucet": "cd faucet && npm install && node server.js",
+    "faucet-dev": "cd faucet && npm run dev",
     "docs": "node scripts/generateDocs.js",
-    "install-cli": "cd cli && npm install && npm link"
+    "install-cli": "cd cli && npm install && npm link",
+    "install-all": "npm install && cd cli && npm install && cd ../faucet && npm install && cd ..",
+    "clean": "rm -rf data/ node_modules/ cli/node_modules/ faucet/node_modules/",
+    "reset-db": "rm -rf data/"
   },
   "keywords": [
     "blockchain",
     "cryptocurrency",
     "proof-of-stake",
     "smart-contracts",
-    "gas-model",
-    "cli"
+    "p2p",
+    "distributed",
+    "public-network"
   ],
   "author": "Sayman Blockchain Team",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
     "elliptic": "^6.5.4",
     "level": "^8.0.0",
     "uuid": "^9.0.0",
     "ws": "^8.14.2",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
   },
   "engines": {
     "node": ">=20.0.0"
