@@ -2,8 +2,51 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import fetch from 'node-fetch';
-import Wallet from '../wallet/wallet.js';
 import crypto from 'crypto';
+import elliptic from 'elliptic';
+
+const EC = elliptic.ec;
+const ec = new EC('secp256k1');
+
+// Standalone Wallet Class (no external dependencies)
+class FaucetWallet {
+  constructor(privateKey = null) {
+    if (privateKey) {
+      this.keyPair = ec.keyFromPrivate(privateKey, 'hex');
+      this.privateKey = privateKey;
+    } else {
+      this.keyPair = ec.genKeyPair();
+      this.privateKey = this.keyPair.getPrivate('hex');
+    }
+    
+    this.publicKey = this.keyPair.getPublic('hex');
+    this.address = this.deriveAddress(this.publicKey);
+  }
+
+  deriveAddress(publicKey) {
+    return crypto
+      .createHash('sha256')
+      .update(publicKey)
+      .digest('hex')
+      .substring(0, 40);
+  }
+
+  sign(hash) {
+    const sig = this.keyPair.sign(hash);
+    return {
+      r: sig.r.toString('hex'),
+      s: sig.s.toString('hex')
+    };
+  }
+
+  export() {
+    return {
+      address: this.address,
+      publicKey: this.publicKey,
+      privateKey: this.privateKey
+    };
+  }
+}
 
 class FaucetServer {
   constructor(config) {
@@ -12,25 +55,21 @@ class FaucetServer {
     this.port = config.faucetPort || 4000;
     this.apiBase = config.apiBase || 'http://localhost:3000/api';
     
-    // Faucet wallet (should be pre-funded)
     this.wallet = null;
     
-    // Request tracking
-    this.addressRequests = new Map(); // address -> [timestamps]
-    this.ipRequests = new Map();      // ip -> [timestamps]
+    this.addressRequests = new Map();
+    this.ipRequests = new Map();
     
-    // Cooldowns
-    this.ipCooldown = 600000;         // 10 minutes
-    this.addressCooldown = 600000;    // 10 minutes
-    this.maxDailyRequests = 5;        // Per address
+    this.ipCooldown = 600000;
+    this.addressCooldown = 600000;
+    this.maxDailyRequests = 5;
     
     this.setupMiddleware();
     this.setupRoutes();
   }
 
   async initialize() {
-    // Load or create faucet wallet
-    this.wallet = new Wallet();
+    this.wallet = new FaucetWallet();
     
     console.log('\n💧 Faucet Server Initialized');
     console.log(`📍 Faucet Address: ${this.wallet.address}`);
@@ -43,9 +82,8 @@ class FaucetServer {
     this.app.use(cors());
     this.app.use(express.json());
     
-    // Global rate limiter
     const limiter = rateLimit({
-      windowMs: 60000, // 1 minute
+      windowMs: 60000,
       max: 10,
       message: { error: 'Too many requests, please try again later' }
     });
@@ -54,31 +92,27 @@ class FaucetServer {
   }
 
   setupRoutes() {
-    // Health check
     this.app.get('/health', (req, res) => {
       res.json({
         status: 'online',
-        faucetAddress: this.wallet.address,
+        faucetAddress: this.wallet ? this.wallet.address : 'initializing',
         amount: this.config.faucetAmount,
         cooldown: this.ipCooldown / 1000,
         maxDaily: this.maxDailyRequests
       });
     });
 
-    // Request tokens
     this.app.post('/request', async (req, res) => {
       try {
         const { address } = req.body;
         const ip = req.ip || req.connection.remoteAddress;
 
-        // Validate address
         if (!address || address.length !== 40) {
           return res.status(400).json({
             error: 'Invalid address format'
           });
         }
 
-        // Check IP cooldown
         const ipCheck = this.checkIPCooldown(ip);
         if (!ipCheck.allowed) {
           return res.status(429).json({
@@ -88,7 +122,6 @@ class FaucetServer {
           });
         }
 
-        // Check address cooldown
         const addressCheck = this.checkAddressCooldown(address);
         if (!addressCheck.allowed) {
           return res.status(429).json({
@@ -98,7 +131,6 @@ class FaucetServer {
           });
         }
 
-        // Check daily limit
         const dailyCheck = this.checkDailyLimit(address);
         if (!dailyCheck.allowed) {
           return res.status(429).json({
@@ -108,8 +140,7 @@ class FaucetServer {
           });
         }
 
-        // Get faucet balance
-        const balanceRes = await fetch(`${this.apiBase}/balance/${this.wallet.address}`);
+        const balanceRes = await fetch(`${this.apiBase}/address/${this.wallet.address}`);
         const balanceData = await balanceRes.json();
 
         if (balanceData.balance < this.config.faucetAmount) {
@@ -119,10 +150,8 @@ class FaucetServer {
           });
         }
 
-        // Get nonce
-        const nonce = balanceData.nonce;
+        const nonce = balanceData.nonce || 0;
 
-        // Create and sign transaction
         const txData = {
           type: 'TRANSFER',
           data: {
@@ -156,7 +185,6 @@ class FaucetServer {
           publicKey: this.wallet.publicKey
         };
 
-        // Broadcast transaction
         const broadcastRes = await fetch(`${this.apiBase}/broadcast`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -166,7 +194,6 @@ class FaucetServer {
         const result = await broadcastRes.json();
 
         if (result.success) {
-          // Record request
           this.recordRequest(ip, address);
 
           console.log(`💧 Faucet sent ${this.config.faucetAmount} SAYM to ${address.substring(0, 8)}... from IP ${ip}`);
@@ -193,10 +220,9 @@ class FaucetServer {
       }
     });
 
-    // Stats endpoint
     this.app.get('/stats', async (req, res) => {
       try {
-        const balanceRes = await fetch(`${this.apiBase}/balance/${this.wallet.address}`);
+        const balanceRes = await fetch(`${this.apiBase}/address/${this.wallet.address}`);
         const balanceData = await balanceRes.json();
 
         res.json({
@@ -250,7 +276,7 @@ class FaucetServer {
 
   checkDailyLimit(address) {
     const now = Date.now();
-    const oneDayAgo = now - 86400000; // 24 hours
+    const oneDayAgo = now - 86400000;
     const requests = this.addressRequests.get(address) || [];
     const todayRequests = requests.filter(t => t > oneDayAgo);
 
@@ -264,17 +290,14 @@ class FaucetServer {
   recordRequest(ip, address) {
     const now = Date.now();
 
-    // Record IP
     const ipRequests = this.ipRequests.get(ip) || [];
     ipRequests.push(now);
     this.ipRequests.set(ip, ipRequests);
 
-    // Record address
     const addressRequests = this.addressRequests.get(address) || [];
     addressRequests.push(now);
     this.addressRequests.set(address, addressRequests);
 
-    // Cleanup old requests (older than 24 hours)
     this.cleanup();
   }
 
@@ -282,7 +305,6 @@ class FaucetServer {
     const now = Date.now();
     const oneDayAgo = now - 86400000;
 
-    // Cleanup IP requests
     for (const [ip, requests] of this.ipRequests.entries()) {
       const recent = requests.filter(t => t > oneDayAgo);
       if (recent.length === 0) {
@@ -292,7 +314,6 @@ class FaucetServer {
       }
     }
 
-    // Cleanup address requests
     for (const [address, requests] of this.addressRequests.entries()) {
       const recent = requests.filter(t => t > oneDayAgo);
       if (recent.length === 0) {
@@ -316,29 +337,30 @@ class FaucetServer {
   }
 
   listen() {
-    this.app.listen(this.port, () => {
-      console.log(`✅ Faucet server running on http://localhost:${this.port}`);
+    this.app.listen(this.port, '0.0.0.0', () => {
+      console.log(`✅ Faucet server running on http://0.0.0.0:${this.port}`);
       console.log(`🔗 Connected to blockchain API: ${this.apiBase}\n`);
     });
 
-    // Periodic cleanup
     setInterval(() => {
       this.cleanup();
-    }, 3600000); // Every hour
+    }, 3600000);
   }
 }
 
-// Standalone execution
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const config = {
-    faucetPort: process.env.FAUCET_PORT || 4000,
-    apiBase: process.env.API_BASE || 'http://localhost:3000/api',
-    faucetAmount: parseInt(process.env.FAUCET_AMOUNT || '100')
-  };
+// Main execution
+const config = {
+  faucetPort: parseInt(process.env.FAUCET_PORT || process.env.PORT || '10000'),
+  apiBase: process.env.API_BASE || 'http://localhost:3000/api',
+  faucetAmount: parseInt(process.env.FAUCET_AMOUNT || '100')
+};
 
-  const faucetServer = new FaucetServer(config);
-  await faucetServer.initialize();
-  faucetServer.listen();
-}
+console.log('🚀 Starting Faucet Server...');
+console.log(`📡 API Base: ${config.apiBase}`);
+console.log(`🌐 Port: ${config.faucetPort}`);
+
+const faucetServer = new FaucetServer(config);
+await faucetServer.initialize();
+faucetServer.listen();
 
 export default FaucetServer;
