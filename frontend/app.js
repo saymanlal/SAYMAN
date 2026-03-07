@@ -1070,3 +1070,104 @@ async function stakeTokens() {
 
 // Similar updates for unstakeTokens, deployContract, callContract...
 // (Apply same pattern: fetch nonce, estimate gas, include in txData)
+
+// ... existing code
+
+// Load network stats
+async function loadNetworkStats() {
+  try {
+    const res = await fetch(`${apiBase}/network/stats`);
+    const data = await res.json();
+
+    // Update stats
+    document.getElementById('net-peers').textContent = data.peers;
+    document.getElementById('net-validators').textContent = data.validators;
+    document.getElementById('net-height').textContent = data.blockHeight;
+    document.getElementById('net-blocktime').textContent = data.averageBlockTime;
+    document.getElementById('net-stake').textContent = data.totalStake + ' SAYM';
+    document.getElementById('net-mempool').textContent = data.mempool;
+
+    // Update node info
+    document.getElementById('node-id').textContent = data.nodeId || 'N/A';
+    document.getElementById('node-mode').textContent = (data.mode || 'unknown').toUpperCase();
+    document.getElementById('node-uptime').textContent = formatUptime(data.uptime);
+    document.getElementById('node-network').textContent = data.network;
+    document.getElementById('node-chainid').textContent = data.chainId;
+
+    // Update peer list
+    loadPeerList(data.peerList || []);
+
+  } catch (error) {
+    console.error('Error loading network stats:', error);
+  }
+}
+
+function loadPeerList(peers) {
+  const list = document.getElementById('peer-list');
+  list.innerHTML = '';
+
+  if (peers.length === 0) {
+    list.innerHTML = '<p>No connected peers</p>';
+    return;
+  }
+
+  peers.forEach(peer => {
+    const div = document.createElement('div');
+    div.className = 'peer-item';
+    
+    const timeSinceLastSeen = Math.floor((Date.now() - peer.lastSeen) / 1000);
+    
+    div.innerHTML = `
+      <div>
+        <strong>Node ID:</strong> ${peer.nodeId.substring(0, 16)}...
+      </div>
+      <div>
+        <strong>Address:</strong> ${peer.ip}:${peer.port}
+      </div>
+      <div>
+        <strong>Chain:</strong> ${peer.chainId}
+      </div>
+      <div>
+        <strong>Version:</strong> ${peer.version}
+      </div>
+      <div>
+        <strong>Last Seen:</strong> ${timeSinceLastSeen}s ago
+      </div>
+    `;
+    
+    list.appendChild(div);
+  });
+}
+
+function formatUptime(seconds) {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  
+  const parts = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  parts.push(`${secs}s`);
+  
+  return parts.join(' ');
+}
+
+// Update showPage function to load network stats
+const originalShowPage = showPage;
+showPage = function(pageId) {
+  originalShowPage(pageId);
+  
+  if (pageId === 'network') {
+    loadNetworkStats();
+    // Auto-refresh every 3 seconds
+    const networkInterval = setInterval(() => {
+      if (document.getElementById('network').classList.contains('active')) {
+        loadNetworkStats();
+      } else {
+        clearInterval(networkInterval);
+      }
+    }, 3000);
+  }
+};

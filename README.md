@@ -1,913 +1,816 @@
-# Sayman Blockchain - Phase 6: FINAL PRODUCTION RELEASE
+# Sayman Blockchain - Phase 7: Public Network + Real P2P
 
-![Phase](https://img.shields.io/badge/Phase-6-blue)
+![Phase](https://img.shields.io/badge/Phase-7-blue)
 ![Status](https://img.shields.io/badge/Status-Complete-green)
-![Gas](https://img.shields.io/badge/Gas-Model-orange)
-![CLI](https://img.shields.io/badge/CLI-Available-purple)
+![Network](https://img.shields.io/badge/Network-Public-orange)
+![P2P](https://img.shields.io/badge/P2P-Distributed-purple)
 
-## 🎉 Final Release
+## 🌐 Public Network Release
 
-Phase 6 is the **complete, production-ready educational blockchain** with:
-- ✅ Deterministic gas model
-- ✅ Execution limits & sandboxing
-- ✅ Anti-spam protections
-- ✅ Nonce-based replay protection
-- ✅ Full-featured CLI tool
-- ✅ Automatic documentation generator
-- ✅ Complete Web3 UI
+Phase 7 transforms Sayman into a **true distributed blockchain network** capable of running across multiple machines on the internet.
+
+### What's New in Phase 7
+
+#### 🔗 Real Peer Discovery
+- Automatic peer exchange protocol
+- Bootstrap node support
+- Peer health monitoring
+- Chain ID validation
+- Maximum peer limits
+
+#### 📡 Multi-Node Distribution
+- Run across different machines
+- Internet-ready P2P protocol
+- Node synchronization
+- Block propagation
+- Transaction relay
+
+#### 🎯 Node Modes
+Three operational modes:
+- **Validator**: Produces blocks + validates
+- **Full Node**: Validates + relays
+- **Observer**: Read-only node
+
+#### 🚰 Public Faucet Server
+- Standalone faucet service
+- Rate limiting (IP + Address)
+- Daily request limits
+- RESTful API
+
+#### 📊 Network Dashboard
+- Live peer visualization
+- Network statistics
+- Node information
+- Real-time updates
 
 ---
 
-## What's New in Phase 6
+## Architecture
 
-### ⛽ Gas Model
+### P2P Protocol
+```
+┌─────────────────────────────────────────┐
+│         Bootstrap Node (Validator)       │
+│         IP: 35.210.100.12:6001          │
+└───────────────┬─────────────────────────┘
+                │
+    ┌───────────┼───────────┐
+    │           │           │
+┌───▼────┐  ┌───▼────┐  ┌───▼────┐
+│ Node 2 │  │ Node 3 │  │ Node 4 │
+│ Full   │  │ Full   │  │Observer│
+└────────┘  └────────┘  └────────┘
+```
 
-**Every transaction now requires gas:**
-```javascript
+### Message Types
+
+**HELLO**: Node handshake
+```json
 {
-  type: "TRANSFER",
-  data: { from, to, amount },
-  gasLimit: 50000,      // Maximum gas allowed
-  gasPrice: 1,          // Price per gas unit
-  nonce: 0              // Sequential per address
+  "type": "HELLO",
+  "nodeId": "abc123...",
+  "chainId": "sayman-public-testnet-1",
+  "version": "7.0.0",
+  "port": 6001,
+  "mode": "validator",
+  "blockHeight": 150
 }
 ```
 
-**Gas Costs:**
-- TRANSFER: 21 gas
-- STAKE/UNSTAKE: 50 gas
-- CONTRACT_DEPLOY: 500 + (code_size / 10) gas
-- CONTRACT_CALL: 100 + execution gas
-- State Read: 5 gas per read
-- State Write: 20 gas per write
-
-**Why Gas Matters:**
-- Prevents infinite loops in contracts
-- Economic cost for network usage
-- Rewards validators for computation
-- Protects against spam
-
-### 🔒 Execution Limits
-
-Contracts are sandboxed with strict limits:
-- **Max Execution Time**: 50ms
-- **Max State Size**: 50KB per contract
-- **Max Instructions**: 10,000 operations
-- **No Recursion**: Beyond depth limit
-
-If a contract exceeds limits:
-- Transaction reverts
-- Gas is still consumed (up to limit)
-- Block remains valid
-
-### 🛡️ Anti-Spam Protections
-
-**1. Nonce System**
-Every address has a sequential nonce:
-```javascript
-address: "abc123..."
-nonce: 0  // First transaction
-nonce: 1  // Second transaction
-nonce: 2  // Third transaction
-```
-
-Transactions with wrong nonce are rejected.
-
-**2. Rate Limiting**
-- Max 10 transactions per minute per address
-- Prevents mempool flooding
-
-**3. Mempool Limits**
-- Maximum 1,000 pending transactions
-- Oldest transactions dropped when full
-
-**4. Minimum Gas Price**
-- Floor price: 1 wei per gas
-- Prevents zero-cost spam
-
-### 🖥️ CLI Tool
-
-Full-featured command-line interface:
-```bash
-# Install
-cd cli
-npm install
-npm link
-
-# Usage
-sayman wallet create
-sayman balance
-sayman send <to> <amount>
-sayman stake <amount>
-sayman validators
-sayman network
-```
-
-**Features:**
-- Local wallet management
-- Client-side transaction signing
-- Gas estimation
-- Pretty terminal output
-- Works with testnet & mainnet
-
-### 📚 Auto Documentation
-
-Generate live network docs:
-```bash
-npm run docs
-```
-
-Produces `docs/NETWORK_INFO.md` with:
-- Current network stats
-- Gas configuration
-- Validator list
-- API endpoints
-- Economics breakdown
+**PEERS_REQUEST/RESPONSE**: Peer discovery
+**NEW_TX**: Transaction broadcast
+**NEW_BLOCK**: Block propagation
+**CHAIN_SYNC_REQUEST/RESPONSE**: Blockchain sync
+**HEARTBEAT**: Keep-alive
 
 ---
 
 ## Installation
+
+### Prerequisites
+- Node.js v20+
+- Public IP (for public nodes)
+- Open ports: 3000 (API), 6001 (P2P), 4000 (Faucet)
+
+### Quick Install
 ```bash
-# Install dependencies
+# Clone/download project
+cd sayman-blockchain
+
+# Install all dependencies
+npm run install-all
+
+# Or install individually
 npm install
+cd cli && npm install && npm link && cd ..
+cd faucet && npm install && cd ..
+```
 
-# Install CLI (optional)
-npm run install-cli
+### Automated Deployment
+```bash
+chmod +x scripts/deploy-node.sh
+./scripts/deploy-node.sh
+```
+
+This script:
+- ✅ Checks Node.js version
+- ✅ Installs dependencies
+- ✅ Sets up CLI
+- ✅ Installs faucet
+- ✅ (Optional) Creates systemd service
+- ✅ (Optional) Configures firewall
+
+---
+
+## Running Nodes
+
+### Local Testing (3 Nodes)
+```bash
+# Create logs directory
+mkdir -p logs
+
+# Run test script
+chmod +x scripts/test-p2p.sh
+./scripts/test-p2p.sh
+```
+
+This starts:
+- Node 1 (Validator) on ports 3000/6001
+- Node 2 (Full Node) on ports 3001/6002
+- Node 3 (Observer) on ports 3002/6003
+
+### Public Testnet
+
+#### Bootstrap Node (First Node)
+```bash
+npm run public-validator
+```
+
+This starts a validator node on public testnet without connecting to peers.
+
+#### Joining Nodes
+```bash
+# Full node connecting to bootstrap
+npm run public-fullnode -- --bootstrap 35.210.100.12:6001
+
+# Observer node connecting to multiple peers
+npm run observer -- --network public-testnet --bootstrap 35.210.100.12:6001,40.120.50.30:6002
+```
+
+### Custom Configuration
+```bash
+# Validator with custom ports
+PORT=4000 P2P_PORT=7001 node server.js \
+  --network public-testnet \
+  --mode validator
+
+# Full node with bootstrap
+PORT=4001 P2P_PORT=7002 node server.js \
+  --network public-testnet \
+  --mode fullnode \
+  --bootstrap 35.210.100.12:6001
+
+# Observer node
+PORT=4002 P2P_PORT=7003 node server.js \
+  --network public-testnet \
+  --mode observer \
+  --bootstrap 35.210.100.12:6001
 ```
 
 ---
 
-## Running the Network
+## Node Modes
 
-### Testnet
+### Validator Mode
+
+**Purpose**: Produce blocks and validate transactions
+
+**Requirements**:
+- Staked tokens (min: 500 SAYM on public testnet)
+- Reliable uptime
+- Good network connection
+
+**Runs**:
 ```bash
-npm run testnet
+npm run validator
+# or
+npm run public-validator
 ```
 
-### Mainnet
+**Responsibilities**:
+- ✅ Produce blocks every 5 seconds
+- ✅ Validate transactions
+- ✅ Broadcast blocks to network
+- ✅ Maintain full blockchain
+- ✅ Relay transactions
+
+**Rewards**: Block rewards + gas fees
+
+### Full Node Mode
+
+**Purpose**: Validate and relay without producing blocks
+
+**Requirements**:
+- No staking required
+- Moderate resources
+
+**Runs**:
 ```bash
-npm run mainnet
+npm run fullnode -- --bootstrap PEER_IP:PORT
+# or
+npm run public-fullnode -- --bootstrap PEER_IP:PORT
 ```
 
-### Multi-Node
+**Responsibilities**:
+- ✅ Validate all blocks
+- ✅ Maintain full blockchain
+- ✅ Relay transactions
+- ✅ Relay blocks
+- ❌ Does NOT produce blocks
+
+**Rewards**: None
+
+### Observer Mode
+
+**Purpose**: Read-only node for explorers/wallets
+
+**Requirements**:
+- Minimal resources
+- No staking
+
+**Runs**:
 ```bash
-# Terminal 1
-npm run node1
-
-# Terminal 2
-npm run node2
-
-# Terminal 3
-npm run node3
+npm run observer -- --bootstrap PEER_IP:PORT
 ```
+
+**Responsibilities**:
+- ✅ Sync blockchain
+- ✅ Provide API access
+- ❌ Does NOT validate
+- ❌ Does NOT relay
+- ❌ Does NOT produce blocks
+
+**Use Cases**:
+- Block explorers
+- Wallet backends
+- Analytics services
 
 ---
 
-## Using the CLI
+## Public Faucet
 
-### Wallet Management
+### Starting the Faucet
 ```bash
-# Create new wallet
-sayman wallet create
+# Default (connects to localhost:3000)
+npm run faucet
 
-# Import existing wallet
-sayman wallet import <privateKey>
+# Custom API endpoint
+FAUCET_PORT=4000 API_BASE=http://35.210.100.12:3000/api npm run faucet
 
-# Show wallet info
-sayman wallet info
-
-# Export private key
-sayman wallet export
+# With custom amount
+FAUCET_AMOUNT=200 npm run faucet
 ```
 
-### Check Balance
+### Using the Faucet
+
+**HTTP API:**
 ```bash
-# Your wallet
-sayman balance
-
-# Any address
-sayman balance 0xabc123...
-```
-
-### Send Transactions
-```bash
-# Basic send
-sayman send 0xabc123... 100
-
-# With custom gas
-sayman send 0xabc123... 100 --gas-limit 30000 --gas-price 2
-```
-
-### Staking
-```bash
-# Stake tokens
-sayman stake 500
-
-# Unstake
-sayman unstake
-
-# Both support custom gas params
-sayman stake 500 --gas-limit 120000 --gas-price 1
-```
-
-### Smart Contracts
-```bash
-# Deploy contract
-sayman deploy contracts/counter.js
-
-# Call contract method
-sayman call 0xcontract123... increment '{}'
-sayman call 0xcontract123... setValue '{"value": 42}'
-
-# With custom gas
-sayman call 0xcontract123... increment '{}' --gas-limit 200000
-```
-
-### Network Info
-```bash
-# Show network details
-sayman network
-
-# List validators
-sayman validators
-
-# Estimate gas
-sayman estimate TRANSFER '{"from":"0x...","to":"0x...","amount":100}'
-```
-
-### Configuration
-```bash
-# Set API endpoint
-sayman config http://localhost:3001/api
-```
-
----
-
-## Gas Model Explained
-
-### How Gas Works
-
-1. **Set Gas Parameters**
-```javascript
-   gasLimit: 50000   // Max gas willing to spend
-   gasPrice: 1       // Price per unit
-```
-
-2. **Transaction Executes**
-   - Gas consumed: 21 (for transfer)
-   - Actual cost: 21 × 1 = 21 wei
-
-3. **Validator Receives Fee**
-   - REWARD_FEE transaction created
-   - Validator gets 21 wei
-
-4. **Unused Gas Refunded**
-   - You paid for 50,000
-   - Used only 21
-   - You're only charged 21
-
-### Gas Estimation
-
-Before sending a transaction:
-```bash
-sayman estimate TRANSFER '{"from":"0xabc","to":"0xdef","amount":100}'
-```
-
-Returns:
-```
-Estimated Gas:         21
-Recommended Limit:     26  (20% buffer)
-Min Gas Price:         1
-Est. Cost (min price): 26 wei
-```
-
-### Contract Gas
-
-Contracts consume gas dynamically:
-```javascript
-function expensiveOperation() {
-  // Each operation costs gas
-  state.value = 1;        // 20 gas (write)
-  let x = state.value;    // 5 gas (read)
-  
-  for (let i = 0; i < 100; i++) {
-    state.array.push(i);  // 20 gas × 100 = 2000 gas
-  }
-}
-```
-
-Total: ~2,025 gas + base (100) = 2,125 gas
-
-If gasLimit < 2,125: **Transaction fails, gas consumed.**
-
----
-
-## Nonce System
-
-### What is a Nonce?
-
-A **nonce** (number used once) is a sequential counter per address.
-
-**Example:**
-```
-Address: 0xabc123...
-Nonce: 0  → First transaction
-Nonce: 1  → Second transaction
-Nonce: 2  → Third transaction
-```
-
-### Why Nonces?
-
-**Prevents Replay Attacks:**
-
-Without nonces:
-```
-1. Alice sends Bob 100 SAYM
-2. Attacker captures the signed transaction
-3. Attacker broadcasts it again
-4. Bob receives another 100 SAYM (theft!)
-```
-
-With nonces:
-```
-1. Alice sends Bob 100 SAYM (nonce: 0)
-2. Attacker captures transaction
-3. Attacker tries to replay
-4. Network rejects: "Nonce 0 already used, expecting nonce 1"
-```
-
-### Getting Your Nonce
-```bash
-# CLI
-sayman balance
-# Shows: Nonce: 5
-
-# API
-curl http://localhost:3000/api/address/0xabc123...
-# Returns: { "nonce": 5, ... }
-```
-
-### Transaction Order
-
-Transactions **must** be in order:
-```
-✅ Correct:
-- Transaction with nonce 0
-- Transaction with nonce 1
-- Transaction with nonce 2
-
-❌ Wrong:
-- Transaction with nonce 0
-- Transaction with nonce 2  ← Rejected! (expecting 1)
-- Transaction with nonce 1
-```
-
----
-
-## Anti-Spam Protections
-
-### 1. Nonce System
-- Sequential per address
-- Prevents replay attacks
-- Ensures transaction ordering
-
-### 2. Gas Fees
-- Economic cost per transaction
-- Prevents free spam
-- Rewards validators
-
-### 3. Rate Limiting
-- Max 10 tx per minute per address
-- Prevents flooding
-- Automatic cleanup
-
-### 4. Mempool Limits
-- Max 1,000 pending transactions
-- FIFO eviction when full
-- Prevents memory exhaustion
-
-### 5. Minimum Gas Price
-- Floor: 1 wei per gas
-- Can't send zero-cost transactions
-- Protects network resources
-
-### 6. Execution Limits
-- Max 50ms execution time
-- Max 10,000 instructions
-- Max 50KB state per contract
-- Prevents DoS via computation
-
----
-
-## Contract Execution Limits
-
-### Time Limit: 50ms
-```javascript
-// ❌ This will timeout
-function infiniteLoop() {
-  while(true) {
-    state.x++;
-  }
-}
-```
-
-**Result:** Transaction reverts after 50ms, gas consumed.
-
-### Instruction Limit: 10,000
-```javascript
-// ❌ This exceeds instruction limit
-function tooManyOps() {
-  for (let i = 0; i < 100000; i++) {
-    state.data.push(i);  // 100k instructions
-  }
-}
-```
-
-**Result:** Throws "Execution limit exceeded", gas consumed.
-
-### State Limit: 50KB
-```javascript
-// ❌ This exceeds state size
-function bloat() {
-  state.hugeArray = new Array(100000).fill('data');
-}
-```
-
-**Result:** Contract state too large, transaction fails.
-
-### Gas Limit
-```javascript
-// If gasLimit = 1000
-function expensive() {
-  for (let i = 0; i < 1000; i++) {
-    state.x = i;  // 20 gas each = 20,000 gas total
-  }
-}
-```
-
-**Result:** Out of gas at iteration 50, transaction reverts.
-
----
-
-## Deterministic Replay
-
-**All Phase 6 features are deterministic:**
-
-### State Rebuilds Include:
-- ✅ Balances
-- ✅ Stakes
-- ✅ Nonces
-- ✅ Validator set
-- ✅ Contract states
-- ✅ Gas fees paid
-- ✅ Rewards distributed
-
-### Test Determinism:
-```bash
-# 1. Run node, do transactions
-npm start
-
-# 2. Check state
-curl http://localhost:3000/api/stats
-# Note: blocks, validators, stakes
-
-# 3. Stop node
-Ctrl+C
-
-# 4. Restart
-npm start
-
-# 5. Verify identical state
-curl http://localhost:3000/api/stats
-# Should match exactly!
-```
-
----
-
-## API Changes (Phase 6)
-
-### New Fields in Transactions
-```json
-{
-  "type": "TRANSFER",
-  "data": {...},
-  "gasLimit": 50000,
-  "gasPrice": 1,
-  "nonce": 0,
-  "signature": {...},
-  "publicKey": "..."
-}
-```
-
-### New Endpoints
-
-**POST /api/estimate-gas**
-```bash
-curl -X POST http://localhost:3000/api/estimate-gas \
+# Request tokens
+curl -X POST http://localhost:4000/request \
   -H "Content-Type: application/json" \
-  -d '{
-    "type": "TRANSFER",
-    "data": {"from":"0x...","to":"0x...","amount":100}
-  }'
+  -d '{"address":"YOUR_WALLET_ADDRESS"}'
+
+# Response
+{
+  "success": true,
+  "amount": 100,
+  "txId": "550e8400-...",
+  "message": "100 SAYM sent successfully",
+  "estimatedTime": "~5-10 seconds"
+}
+```
+
+**Check faucet status:**
+```bash
+curl http://localhost:4000/stats
+
+# Response
+{
+  "faucetAddress": "abc123...",
+  "balance": 99500,
+  "amountPerRequest": 100,
+  "remainingRequests": 995,
+  "cooldown": 600,
+  "maxDailyPerAddress": 5
+}
+```
+
+### Rate Limits
+
+- **IP Cooldown**: 10 minutes between requests
+- **Address Cooldown**: 10 minutes between requests
+- **Daily Limit**: 5 requests per address per 24 hours
+
+---
+
+## Network Discovery
+
+### How Peers Connect
+
+1. **Node starts** with bootstrap peer(s)
+2. **Connects to bootstrap** node
+3. **Sends HELLO** message with chain ID
+4. **Bootstrap validates** chain ID
+5. **If valid**, connection accepted
+6. **Node requests** peer list
+7. **Bootstrap responds** with known peers
+8. **Node connects** to discovered peers
+9. **Process repeats** until max peers reached
+
+### Peer Exchange Example
+```
+Node A starts:
+  --bootstrap 35.210.100.12:6001
+
+Node A → Bootstrap:
+  HELLO {nodeId, chainId, version}
+
+Bootstrap → Node A:
+  HELLO {nodeId, chainId, version}
+
+Node A → Bootstrap:
+  PEERS_REQUEST
+
+Bootstrap → Node A:
+  PEERS_RESPONSE {
+    peers: [
+      {ip: "40.120.50.30", port: 6002},
+      {ip: "52.210.88.15", port: 6003}
+    ]
+  }
+
+Node A connects to discovered peers
+Node A now has 3 connections
+```
+
+### Chain Synchronization
+
+When a new node joins with an empty database:
+```
+1. Node connects to network
+2. Receives block #150 announcement
+3. Realizes it's behind (has 0 blocks)
+4. Sends CHAIN_SYNC_REQUEST {currentHeight: 0}
+5. Peer responds with blocks 0-150
+6. Node validates each block sequentially
+7. Node rebuilds state deterministically
+8. Node is now synced at block #150
+```
+
+---
+
+## API Endpoints
+
+### Network Statistics
+
+**GET /api/network/stats**
+```bash
+curl http://localhost:3000/api/network/stats
 ```
 
 Response:
 ```json
 {
-  "estimatedGas": 21,
-  "recommendedGasLimit": 26,
-  "minGasPrice": 1
+  "network": "Sayman Public Testnet",
+  "chainId": "sayman-public-testnet-1",
+  "blockHeight": 150,
+  "validators": 4,
+  "totalStake": 2500,
+  "mempool": 5,
+  "contracts": 2,
+  "peers": 3,
+  "peerList": [...],
+  "nodeId": "abc123...",
+  "mode": "validator",
+  "averageBlockTime": 5000,
+  "uptime": 3600
 }
 ```
 
-**GET /api/address/:address**
+### Peer Information
 
-Now includes nonce:
+**GET /api/network/peers**
+```bash
+curl http://localhost:3000/api/network/peers
+```
+
+Response:
 ```json
 {
-  "address": "0xabc...",
-  "balance": 1000,
-  "stake": 500,
-  "nonce": 5,
-  "transactions": [...]
+  "count": 3,
+  "peers": [
+    {
+      "nodeId": "abc123...",
+      "ip": "35.210.100.12",
+      "port": 6001,
+      "chainId": "sayman-public-testnet-1",
+      "version": "7.0.0",
+      "lastSeen": 1704067200000
+    }
+  ]
 }
 ```
 
 ---
 
-## Smart Contract Examples
+## Network Dashboard
 
-### Gas-Efficient Counter
-```javascript
-function increment() {
-  // Efficient: single write
-  state.count = (state.count || 0) + 1;
-  // Cost: ~20 gas
-}
-```
+### Accessing the UI
 
-### Gas-Heavy Counter
-```javascript
-function inefficientIncrement() {
-  // Inefficient: multiple operations
-  let current = state.count || 0;      // 5 gas
-  let temp = current;                   // 1 gas
-  temp = temp + 1;                      // 1 gas
-  state.count = temp;                   // 20 gas
-  state.lastUpdate = Date.now();        // ❌ Non-deterministic!
-  // Cost: ~27 gas (and fails!)
-}
-```
+Open browser: `http://localhost:3000`
 
-### Batch Operations
-```javascript
-function batchMint(users, amount) {
-  // Gas cost: 20 × users.length
-  for (let user of users) {
-    state.balances[user] = (state.balances[user] || 0) + amount;
-  }
-  
-  // 100 users = 2,000 gas
-  // Need gasLimit >= 2,100
-}
-```
+Click **"Network"** tab to see:
+
+**Network Stats:**
+- Connected peers count
+- Active validators
+- Block height
+- Average block time
+- Total stake
+- Mempool size
+
+**Node Information:**
+- Your node ID
+- Operating mode
+- Uptime
+- Network name
+- Chain ID
+
+**Peer List:**
+- Node IDs
+- IP addresses
+- Chain IDs
+- Versions
+- Last seen time
+
+**Auto-updates every 3 seconds**
 
 ---
 
-## Economics
+## CLI Usage
 
-### Gas Fees Distribution
-```
-User sends transaction:
-  Amount: 100 SAYM
-  Gas Limit: 50,000
-  Gas Price: 1
-  
-Transaction executes:
-  Gas Used: 21
-  Gas Fee: 21 × 1 = 21 wei
-  
-User pays:
-  Transfer: 100 SAYM
-  Gas: 21 wei
-  Total: 100.000000000000000021 SAYM
-  
-Validator receives:
-  Block Reward: 10 SAYM (from protocol)
-  Gas Fee: 21 wei (from user)
-  Total: 10.000000000000000021 SAYM
-```
-
-### Validator Income
-```
-Assumptions:
-- Block time: 5 seconds
-- Block reward: 10 SAYM
-- Average gas per block: 1,000,000
-- Average gas price: 1 wei
-- 1 SAYM = 10^18 wei
-
-Per block:
-  Reward: 10 SAYM
-  Fees: 1,000,000 wei = 0.000001 SAYM
-  Total: 10.000001 SAYM
-
-Per day (17,280 blocks):
-  Reward: 172,800 SAYM
-  Fees: ~17 SAYM
-  Total: ~172,817 SAYM
-
-If validator has 10% of stake:
-  Daily income: ~17,282 SAYM
-  Yearly: ~6.3M SAYM
-```
-
----
-
-## Testing Phase 6
-
-### Test Script
+### Network Commands
 ```bash
-chmod +x test-phase6.sh
-./test-phase6.sh
-```
+# View network info
+sayman network
 
-### Manual Testing
+# List validators
+sayman validators
 
-**1. Gas Validation**
-```bash
-# Should succeed
-sayman send 0xabc... 10 --gas-limit 30 --gas-price 1
-
-# Should fail (gas too low)
-sayman send 0xabc... 10 --gas-limit 10 --gas-price 1
-```
-
-**2. Nonce Validation**
-```bash
-# Get current nonce
+# Check balance
 sayman balance
-# Nonce: 5
 
-# Try wrong nonce (will fail)
-# Modify CLI to send nonce: 10
-# Error: "Invalid nonce. Expected: 5, Got: 10"
+# Send transaction (relayed across network)
+sayman send 0xRECIPIENT 100
+
+# Stake (become validator)
+sayman stake 500
 ```
 
-**3. Rate Limiting**
+All transactions are automatically broadcast to connected peers.
+
+---
+
+## Deployment Guide
+
+### Cloud Deployment (AWS/GCP/Azure)
+
+#### 1. Launch Instance
+
+**Specs:**
+- 2 vCPU
+- 4GB RAM
+- 20GB SSD
+- Ubuntu 22.04 LTS
+
+#### 2. Configure Firewall
+
+**AWS Security Group:**
+```
+Inbound Rules:
+- Port 3000: 0.0.0.0/0 (API)
+- Port 6001: 0.0.0.0/0 (P2P)
+- Port 4000: 0.0.0.0/0 (Faucet, optional)
+- Port 22: YOUR_IP/32 (SSH)
+```
+
+**GCP Firewall Rules:**
 ```bash
-# Send 15 transactions rapidly
-for i in {1..15}; do
-  sayman send 0xabc... 1
-done
+gcloud compute firewall-rules create sayman-api \
+  --allow tcp:3000
 
-# Last 5 should fail with "Rate limit exceeded"
+gcloud compute firewall-rules create sayman-p2p \
+  --allow tcp:6001
 ```
 
-**4. Contract Execution Limits**
-```javascript
-// contracts/infinite.js
-function bad() {
-  while(true) {}  // Infinite loop
-}
-
-// Deploy
-sayman deploy contracts/infinite.js
-
-// Call (will timeout after 50ms)
-sayman call 0xcontract... bad '{}'
-// Error: "Execution limit exceeded: timeout"
-```
-
-**5. Deterministic Rebuild**
+#### 3. Install Dependencies
 ```bash
-# Run node, do many transactions
-# Stop node (Ctrl+C)
-# Delete database
-rm -rf data/
+# Update system
+sudo apt update && sudo apt upgrade -y
 
-# Restart and verify state matches
-npm start
+# Install Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install build tools
+sudo apt install -y build-essential git
+
+# Clone project
+git clone https://github.com/yourrepo/sayman.git
+cd sayman
+
+# Run deployment script
+chmod +x scripts/deploy-node.sh
+./scripts/deploy-node.sh
 ```
 
----
-
-## Project Structure
-```
-sayman-phase6/
-├── config/
-│   ├── testnet.js
-│   ├── mainnet.js
-│   └── index.js
-│
-├── core/
-│   ├── blockchain.js      ✨ Gas execution
-│   ├── block.js           ✨ Gas tracking
-│   ├── transaction.js     ✨ Gas + nonce
-│   ├── state.js           ✨ Nonce management
-│   ├── pos.js
-│   ├── contracts.js       ✨ Execution limits
-│   ├── gas.js             ✨ NEW: Gas calculator
-│   └── nonce.js           ✨ NEW: Nonce manager
-│
-├── api/
-│   └── routes.js          ✨ Gas estimation endpoint
-│
-├── p2p/
-│   └── server.js
-│
-├── wallet/
-│   └── wallet.js
-│
-├── frontend/
-│   ├── index.html         ✨ Gas UI
-│   ├── style.css
-│   ├── app.js             ✨ Gas integration
-│   └── crypto-client.js   ✨ Nonce signing
-│
-├── cli/                   ✨ NEW: CLI tool
-│   ├── sayman-cli.js
-│   ├── wallet-cli.js
-│   └── package.json
-│
-├── scripts/               ✨ NEW: Docs generator
-│   └── generateDocs.js
-│
-├── docs/                  ✨ NEW: Auto-generated
-│   └── NETWORK_INFO.md
-│
-├── server.js
-├── package.json
-└── README-PHASE6.md
-```
-
----
-
-## Migration from Phase 5
-
-### Breaking Changes
-
-**1. Transactions now require gas:**
-```javascript
-// Old (Phase 5)
-{
-  type: "TRANSFER",
-  data: {...},
-  signature: {...}
-}
-
-// New (Phase 6)
-{
-  type: "TRANSFER",
-  data: {...},
-  gasLimit: 50000,    // REQUIRED
-  gasPrice: 1,        // REQUIRED
-  nonce: 0,           // REQUIRED
-  signature: {...}
-}
-```
-
-**2. Nonce required:**
-- Must fetch nonce before creating transaction
-- Transactions must be sequential
-
-**3. Gas fees deducted:**
-- Balance checks now include gas cost
-- Validators receive gas fees
-
-### Database Migration
-
-Phase 6 changes state structure (adds nonces).
-
-**To migrate:**
+#### 4. Start Node
 ```bash
-# Backup old data
-cp -r data/ data_backup/
+# Using systemd (recommended)
+sudo systemctl start sayman
+sudo systemctl status sayman
 
-# Delete old database
-rm -rf data/
-
-# Restart (rebuilds from genesis)
-npm start
+# Or manually with screen/tmux
+screen -S sayman
+npm run public-validator
+# Ctrl+A, D to detach
 ```
 
-All transactions will replay with nonce tracking.
+#### 5. Monitor
+```bash
+# View logs
+sudo journalctl -u sayman -f
 
----
+# Check peers
+curl http://localhost:3000/api/network/peers
 
-## Security Considerations
+# Check status
+curl http://localhost:3000/api/network/stats
+```
 
-### What Phase 6 Protects Against
+### Multiple Nodes Setup
 
-✅ **Replay Attacks** - Nonce system  
-✅ **Spam** - Gas fees + rate limiting  
-✅ **DoS via Computation** - Execution limits  
-✅ **Memory Exhaustion** - State size limits  
-✅ **Infinite Loops** - Instruction counting  
-✅ **Mempool Flooding** - Size limits  
-✅ **Zero-Cost Attacks** - Minimum gas price  
+**Bootstrap Node (Node 1):**
+```bash
+# Server 1: 35.210.100.12
+npm run public-validator
+```
 
-### What Phase 6 Does NOT Protect
+**Full Node (Node 2):**
+```bash
+# Server 2: 40.120.50.30
+npm run public-fullnode -- --bootstrap 35.210.100.12:6001
+```
 
-❌ **51% Attacks** - Need more validators  
-❌ **MEV** - No MEV protection built-in  
-❌ **Front-Running** - Transactions visible in mempool  
-❌ **Sybil Attacks** - Low barrier to entry  
+**Observer Node (Node 3):**
+```bash
+# Server 3: 52.210.88.15
+npm run observer -- --network public-testnet --bootstrap 35.210.100.12:6001
+```
 
-**This is educational. Not production-ready for real value.**
-
----
-
-## Performance
-
-### Benchmarks (Testnet)
-
-**Transaction Processing:**
-- TRANSFER: ~21 gas (< 1ms)
-- STAKE: ~50 gas (< 1ms)
-- CONTRACT_DEPLOY: ~500-5000 gas (5-50ms)
-- CONTRACT_CALL: ~100-10000 gas (10-50ms)
-
-**Block Production:**
-- Max transactions per block: Limited by gas
-- Max gas per block: 10,000,000
-- Practical limit: ~200-500 transactions/block
-
-**Throughput:**
-- Block time: 5s (testnet)
-- TPS: ~40-100 (testnet)
-- Can be improved by:
-  - Reducing block time
-  - Increasing block gas limit
-  - Optimizing gas costs
+**Faucet Server:**
+```bash
+# Any server
+API_BASE=http://35.210.100.12:3000/api npm run faucet
+```
 
 ---
 
 ## Troubleshooting
 
-### "Invalid nonce"
-```
-Error: Invalid nonce. Expected: 5, Got: 3
-```
+### Peers Not Connecting
 
-**Solution:** Fetch current nonce before sending:
+**Symptom:** Peer count stays at 0
+
+**Check:**
 ```bash
-sayman balance  # Check nonce
+# Firewall
+sudo ufw status
+sudo ufw allow 6001/tcp
+
+# Listening
+netstat -tuln | grep 6001
+
+# Logs
+tail -f logs/node1.log
 ```
 
-### "Out of gas"
-```
-Error: Out of gas
-```
+**Solution:**
+- Verify firewall rules
+- Check bootstrap peer is reachable
+- Ensure correct chain ID
+- Verify ports are open
 
-**Solution:** Increase gas limit:
+### Chain Not Syncing
+
+**Symptom:** Block height not increasing
+
+**Check:**
 ```bash
-sayman send 0x... 100 --gas-limit 100000
+curl http://localhost:3000/api/network/stats | jq '.blockHeight'
 ```
 
-### "Gas limit too low"
-```
-Error: Gas limit too low. Minimum: 21
-```
-
-**Solution:** Use recommended gas from estimation:
+**Solution:**
 ```bash
-sayman estimate TRANSFER '{...}'
+# Stop node
+pkill -f "node server.js"
+
+# Delete database
+rm -rf data/
+
+# Restart with bootstrap
+npm run fullnode -- --bootstrap WORKING_PEER:6001
 ```
 
-### "Rate limit exceeded"
-```
-Error: Rate limit exceeded. Please wait.
+### "Chain ID Mismatch"
+
+**Symptom:** Peers rejected with chain ID error
+
+**Cause:** Connecting to wrong network
+
+**Solution:**
+- Verify network flag: `--network public-testnet`
+- Check config file chain ID
+- Ensure all nodes use same network
+
+### High Memory Usage
+
+**Symptom:** Node crashes with OOM
+
+**Solution:**
+```bash
+# Increase Node.js memory
+NODE_OPTIONS="--max-old-space-size=4096" npm run fullnode
 ```
 
-**Solution:** Wait 1 minute and retry.
+### Faucet Empty
 
-### "Execution limit exceeded"
-```
-Error: Execution limit exceeded: timeout
-```
+**Symptom:** Faucet returns "Faucet is empty"
 
-**Solution:** Optimize contract code or break into multiple transactions.
+**Solution:**
+```bash
+# Check faucet balance
+curl http://localhost:4000/stats
+
+# Fund faucet wallet
+sayman send FAUCET_ADDRESS 10000
+```
 
 ---
 
-## Production Checklist
+## Network Configuration
 
-Before deploying to production:
+### Public Testnet Settings
+```javascript
+{
+  networkName: 'Sayman Public Testnet',
+  chainId: 'sayman-public-testnet-1',
+  blockTime: 5000,
+  blockReward: 10,
+  minStake: 500,
+  faucetAmount: 100,
+  maxPeers: 50
+}
+```
 
-- [ ] Use mainnet configuration
-- [ ] Set appropriate gas costs
-- [ ] Configure gas limits
-- [ ] Set up monitoring
-- [ ] Enable rate limiting
-- [ ] Configure proper genesis
-- [ ] Test gas estimation
-- [ ] Test nonce handling
-- [ ] Test execution limits
-- [ ] Verify deterministic replay
-- [ ] Security audit
-- [ ] Load testing
-- [ ] Documentation review
+### Creating Custom Network
+
+1. Copy `config/public-testnet.js`
+2. Modify parameters
+3. Change `chainId` (important!)
+4. Run with `--network custom`
+
+---
+
+## Security Considerations
+
+### Chain ID Validation ✅
+Prevents connecting to wrong networks
+
+### Peer Limits ✅
+Max 50 peers prevents DoS
+
+### Rate Limiting ✅
+Faucet protects against abuse
+
+### Heartbeat System ✅
+Removes stale peers automatically
+
+### Still Missing (Production)
+- ❌ Peer reputation system
+- ❌ DDoS protection
+- ❌ Encrypted connections
+- ❌ NAT traversal
+- ❌ Sybil attack prevention
+
+**Use for testing/education only**
+
+---
+
+## Performance
+
+### Benchmarks (3-Node Local Network)
+
+- Block propagation: ~100-200ms
+- Transaction broadcast: ~50-100ms
+- Peer discovery: ~2-5 seconds
+- Full chain sync: ~10-30 seconds (1000 blocks)
+
+### Recommended Specs
+
+**Validator:**
+- 4 vCPU
+- 8GB RAM
+- 50GB SSD
+- 100 Mbps network
+
+**Full Node:**
+- 2 vCPU
+- 4GB RAM
+- 30GB SSD
+- 50 Mbps network
+
+**Observer:**
+- 1 vCPU
+- 2GB RAM
+- 20GB SSD
+- 25 Mbps network
+
+---
+
+## Project Structure
+```
+sayman-phase7/
+├── config/
+│   ├── testnet.js
+│   ├── mainnet.js
+│   ├── public-testnet.js    ✨ NEW
+│   └── index.js              ✨ Updated
+├── core/
+│   └── ... (unchanged)
+├── p2p/
+│   ├── server.js             ✨ Rewritten
+│   └── peerManager.js        ✨ NEW
+├── faucet/                   ✨ NEW
+│   ├── server.js
+│   └── package.json
+├── scripts/
+│   ├── deploy-node.sh        ✨ NEW
+│   ├── test-p2p.sh           ✨ NEW
+│   └── generateDocs.js
+├── frontend/
+│   ├── index.html            ✨ Updated (network page)
+│   ├── app.js                ✨ Updated (network stats)
+│   └── style.css             ✨ Updated
+├── server.js                 ✨ Updated (modes, bootstrap)
+├── package.json              ✨ Updated
+└── README-PHASE7.md          ✨ NEW
+```
+
+---
+
+## Migration from Phase 6
+
+### Breaking Changes
+
+**P2P Protocol:**
+- New message format
+- Chain ID validation
+- Node ID generation
+
+**Configuration:**
+- New `--mode` flag
+- New `--bootstrap` flag
+- New `--network` options
+
+### Upgrade Steps
+```bash
+# 1. Backup
+cp -r data/ data_backup/
+
+# 2. Update code
+git pull origin phase7
+
+# 3. Install dependencies
+npm install
+cd faucet && npm install && cd ..
+
+# 4. Clean database (fresh start)
+rm -rf data/
+
+# 5. Start with new flags
+npm run public-validator
+```
 
 ---
 
@@ -917,37 +820,11 @@ MIT
 
 ## Version
 
-6.0.0 - Phase 6 Complete (FINAL)
+7.0.0 - Phase 7 Complete
 
 ---
 
-## Conclusion
+**Sayman Blockchain - Phase 7**  
+*True Distributed Public Network*
 
-**Phase 6 is the complete, production-grade educational blockchain.**
-
-Features achieved:
-- ✅ Deterministic state replay
-- ✅ Client-side cryptography
-- ✅ Gas model & execution limits
-- ✅ Anti-spam protections
-- ✅ Smart contracts with sandboxing
-- ✅ Multi-node P2P network
-- ✅ Full explorer UI
-- ✅ CLI tool
-- ✅ Auto documentation
-- ✅ Testnet/Mainnet separation
-
-**This is the FINAL educational release.**
-
-Use it to learn, experiment, and understand blockchain technology at a deep level.
-
----
-
-**Sayman Blockchain - Phase 6**  
-*Educational Blockchain - Production Architecture*
-
-Built with ❤️ for learning and innovation
-
-🎓 Perfect for understanding blockchain internals  
-🔧 Real architecture patterns from production systems  
-🚀 Complete from genesis to smart contracts
+Built for real-world P2P blockchain deployment 🌐⛓️

@@ -361,6 +361,48 @@ function createRouter(blockchain, p2pServer, config) {
       res.status(400).json({ error: error.message });
     }
   });
+  router.get('/network/stats', (req, res) => {
+    const stats = blockchain.getStats();
+    const p2pStats = p2pServer ? p2pServer.getNetworkStats() : { peers: 0, peerList: [] };
+    
+    // Calculate average block time
+    let avgBlockTime = config.blockTime;
+    if (blockchain.chain.length > 10) {
+      const recent = blockchain.chain.slice(-10);
+      const timeDiff = recent[recent.length - 1].timestamp - recent[0].timestamp;
+      avgBlockTime = timeDiff / 9; // 9 intervals between 10 blocks
+    }
+    
+    res.json({
+      network: stats.network,
+      chainId: stats.chainId,
+      blockHeight: stats.blocks,
+      validators: stats.validators,
+      totalStake: stats.totalStake,
+      mempool: stats.mempool,
+      contracts: stats.contracts,
+      peers: p2pStats.peers,
+      peerList: p2pStats.peerList,
+      nodeId: p2pStats.nodeId,
+      mode: p2pStats.mode,
+      averageBlockTime: Math.round(avgBlockTime),
+      uptime: process.uptime(),
+      timestamp: Date.now()
+    });
+  });
+
+  // Peer information (NEW)
+  router.get('/network/peers', (req, res) => {
+    if (!p2pServer) {
+      return res.json({ peers: [] });
+    }
+    
+    const p2pStats = p2pServer.getNetworkStats();
+    res.json({
+      count: p2pStats.peers,
+      peers: p2pStats.peerList
+    });
+  });
 
   return router;
 }
