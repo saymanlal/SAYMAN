@@ -19,10 +19,17 @@ class Blockchain {
     this.chainId = config.chainId;
     this.networkName = config.networkName || 'Sayman Network';
     
+    // Determine if running in production (Render.com or similar)
+    const isProduction = process.env.NODE_ENV === 'production' || 
+                         process.env.RENDER === 'true';
+    
     // Database path - use /tmp for Render.com ephemeral storage
-    const dbPath = process.env.NODE_ENV === 'production' 
+    const dbPath = isProduction
       ? '/tmp/sayman-data'
       : path.join(process.cwd(), 'data');
+    
+    console.log(`📁 Database path: ${dbPath}`);
+    console.log(`🌍 Environment: ${isProduction ? 'production' : 'development'}`);
     
     this.db = new Level(dbPath, { valueEncoding: 'json' });
     this.chain = [];
@@ -45,13 +52,20 @@ class Blockchain {
     console.log('🔄 Initializing blockchain...');
     
     try {
+      // Determine if running in production
+      const isProduction = process.env.NODE_ENV === 'production' || 
+                           process.env.RENDER === 'true';
+      
       // Ensure data directory exists
-      const dataDir = process.env.NODE_ENV === 'production'
+      const dataDir = isProduction
         ? '/tmp/sayman-data'
         : path.join(process.cwd(), 'data');
       
+      console.log(`📁 Using database directory: ${dataDir}`);
+      
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
+        console.log(`✅ Created directory: ${dataDir}`);
       }
 
       // Open database with error handling
