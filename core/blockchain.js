@@ -26,42 +26,75 @@ class Blockchain {
   }
 
   async initialize() {
+    console.log('🔄 Initializing blockchain...');
+    
     try {
-      const savedChain = await this.db.get('chain');
-      
-      if (savedChain && savedChain.length > 0) {
-        console.log(`📦 Loading ${savedChain.length} blocks from storage...`);
-        
-        const genesisBlock = savedChain[0];
-        if (genesisBlock.chainId && genesisBlock.chainId !== this.chainId) {
-          throw new Error(`Chain ID mismatch! Expected ${this.chainId}, got ${genesisBlock.chainId}`);
+      // Ensure data directory exists
+      const dataDir = path.join(process.cwd(), 'data');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+  
+      // Open database with error handling
+      if (!this.db || this.db.status !== 'open') {
+        try {
+          await this.db.open();
+          console.log('✅ Database opened');
+        } catch (error) {
+          if (error.code === 'LEVEL_DATABASE_NOT_OPEN') {
+            // Database already opening/opened, wait a bit
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } else {
+            throw error;
+          }
         }
+      }
+  
+      // Load existing chain or create genesis
+      try {
+        const chainData = await this.db.get('blockchain');
+        console.log('📚 Loading existing blockchain...');
         
-        for (const blockData of savedChain) {
+        const parsedChain = JSON.parse(chainData);
+        
+        // Reconstruct blocks
+        this.chain = [];
+        for (const blockData of parsedChain) {
           const block = await Block.fromJSON(blockData);
           this.chain.push(block);
         }
-
-        console.log('🔄 Replaying state from genesis...');
-        this.replayState();
-        
-        console.log('✅ Blockchain loaded and state rebuilt');
-      } else {
-        console.log('🎬 Creating genesis block...');
-        this.createGenesisBlock();
-        await this.saveChain();
+  
+        console.log(`✅ Loaded ${this.chain.length} blocks from database`);
+  
+        // Rebuild state from chain
+        console.log('🔄 Rebuilding state from blockchain...');
+        await this.rebuildStateFromChain();
+        console.log('✅ State rebuilt successfully');
+  
+      } catch (error) {
+        if (error.code === 'LEVEL_NOT_FOUND' || error.notFound) {
+          // No existing chain, create genesis
+          console.log('🌱 Creating genesis block...');
+          const genesisBlock = await this.createGenesisBlock();
+          this.chain = [genesisBlock];
+          await this.saveChain();
+          console.log('✅ Genesis block created');
+        } else {
+          throw error;
+        }
       }
-
-      this.printStats();
+  
+      // Start block production if validator
+      if (this.mode === 'validator') {
+        console.log('⚡ Validator mode - block production will start');
+      }
+  
+      console.log('✅ Blockchain initialization complete');
+      console.log(`📊 Current height: ${this.chain.length}`);
+  
     } catch (error) {
-      if (error.code === 'LEVEL_NOT_FOUND') {
-        console.log('🎬 Creating genesis block...');
-        this.createGenesisBlock();
-        await this.saveChain();
-        this.printStats();
-      } else {
-        throw error;
-      }
+      console.error('❌ Error initializing blockchain:', error);
+      throw error;
     }
   }
 
