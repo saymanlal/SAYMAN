@@ -1,86 +1,87 @@
-# Sayman Blockchain - Phase 5: Production Network + Explorer
+# Sayman Blockchain - Phase 7: Public Network + Real P2P
 
-![Phase](https://img.shields.io/badge/Phase-5-blue)
+![Phase](https://img.shields.io/badge/Phase-7-blue)
 ![Status](https://img.shields.io/badge/Status-Complete-green)
-![Network](https://img.shields.io/badge/Network-Testnet%2FMainnet-orange)
+![Network](https://img.shields.io/badge/Network-Public-orange)
+![P2P](https://img.shields.io/badge/P2P-Distributed-purple)
 
-## Overview
+## 🌐 Public Network Release
 
-Phase 5 is the **production-ready release** of Sayman blockchain with proper network separation, full blockchain explorer, and a modern Web3-style UI.
+Phase 7 transforms Sayman into a **true distributed blockchain network** capable of running across multiple machines on the internet.
 
-### What's New in Phase 5
+### What's New in Phase 7
 
-#### 🌐 Network Configuration System
-- **Testnet** and **Mainnet** configurations
-- Different parameters per network
+#### 🔗 Real Peer Discovery
+- Automatic peer exchange protocol
+- Bootstrap node support
+- Peer health monitoring
 - Chain ID validation
-- Environment-based configuration loading
+- Maximum peer limits
 
-#### 🚰 Faucet Restriction
-- Faucet **only available on testnet**
-- Mainnet rejects faucet requests
-- Configurable faucet amounts and cooldowns
+#### 📡 Multi-Node Distribution
+- Run across different machines
+- Internet-ready P2P protocol
+- Node synchronization
+- Block propagation
+- Transaction relay
 
-#### 🔍 Blockchain Explorer
-- Search by block, transaction, or address
-- Paginated block listing
-- Transaction history per address
-- Detailed block viewer
+#### 🎯 Node Modes
+Three operational modes:
+- **Validator**: Produces blocks + validates
+- **Full Node**: Validates + relays
+- **Observer**: Read-only node
+
+#### 🚰 Public Faucet Server
+- Standalone faucet service
+- Rate limiting (IP + Address)
+- Daily request limits
+- RESTful API
+
+#### 📊 Network Dashboard
+- Live peer visualization
+- Network statistics
+- Node information
 - Real-time updates
-
-#### 📊 Web3 Dashboard
-- Live network statistics
-- Animated counters
-- Real-time block feed
-- Validator monitoring panel
-- APR estimation
-
-#### 🎨 Modern UI
-- Dark theme by default
-- Responsive design
-- Smooth animations
-- Professional styling
-- Mobile-friendly
 
 ---
 
-## Network Configurations
+## Architecture
 
-### Testnet Configuration
-```javascript
+### P2P Protocol
+```
+┌─────────────────────────────────────────┐
+│         Bootstrap Node (Validator)       │
+│         IP: 35.210.100.12:6001          │
+└───────────────┬─────────────────────────┘
+                │
+    ┌───────────┼───────────┐
+    │           │           │
+┌───▼────┐  ┌───▼────┐  ┌───▼────┐
+│ Node 2 │  │ Node 3 │  │ Node 4 │
+│ Full   │  │ Full   │  │Observer│
+└────────┘  └────────┘  └────────┘
+```
+
+### Message Types
+
+**HELLO**: Node handshake
+```json
 {
-  networkName: 'Sayman Testnet',
-  chainId: 'sayman-testnet-1',
-  blockTime: 5000,          // Fast blocks
-  blockReward: 10,          // Higher rewards
-  minStake: 100,            // Lower barrier
-  faucetEnabled: true,      // ✅ Faucet available
-  faucetAmount: 1000
+  "type": "HELLO",
+  "nodeId": "abc123...",
+  "chainId": "sayman-public-testnet-1",
+  "version": "7.0.0",
+  "port": 6001,
+  "mode": "validator",
+  "blockHeight": 150
 }
 ```
 
-**Use cases:**
-- Development
-- Testing
-- Experimentation
-- Learning
-
-### Mainnet Configuration
-```javascript
-{
-  networkName: 'Sayman Mainnet',
-  chainId: 'sayman-mainnet-1',
-  blockTime: 10000,         // Stable blocks
-  blockReward: 5,           // Conservative rewards
-  minStake: 1000,           // Higher security
-  faucetEnabled: false,     // ❌ No faucet
-}
-```
-
-**Use cases:**
-- Production deployments
-- Real value transactions
-- Serious applications
+**PEERS_REQUEST/RESPONSE**: Peer discovery
+**NEW_TX**: Transaction broadcast
+**NEW_BLOCK**: Block propagation
+**CHAIN_SYNC_REQUEST/RESPONSE**: Blockchain sync
+**HEARTBEAT**: Keep-alive
 
 ---
 
@@ -88,620 +89,728 @@ Phase 5 is the **production-ready release** of Sayman blockchain with proper net
 
 ### Prerequisites
 - Node.js v20+
-- npm v9+
+- Public IP (for public nodes)
+- Open ports: 3000 (API), 6001 (P2P), 4000 (Faucet)
 
-### Setup
+### Quick Install
 ```bash
-# Clone or navigate to project
-cd sayman-phase5
+# Clone/download project
+cd sayman-blockchain
 
-# Install dependencies
+# Install all dependencies
+npm run install-all
+
+# Or install individually
 npm install
+cd cli && npm install && npm link && cd ..
+cd faucet && npm install && cd ..
+```
+
+### Automated Deployment
+```bash
+chmod +x scripts/deploy-node.sh
+./scripts/deploy-node.sh
+```
+
+This script:
+- ✅ Checks Node.js version
+- ✅ Installs dependencies
+- ✅ Sets up CLI
+- ✅ Installs faucet
+- ✅ (Optional) Creates systemd service
+- ✅ (Optional) Configures firewall
+
+---
+
+## Running Nodes
+
+### Local Testing (3 Nodes)
+```bash
+# Create logs directory
+mkdir -p logs
+
+# Run test script
+chmod +x scripts/test-p2p.sh
+./scripts/test-p2p.sh
+```
+
+This starts:
+- Node 1 (Validator) on ports 3000/6001
+- Node 2 (Full Node) on ports 3001/6002
+- Node 3 (Observer) on ports 3002/6003
+
+### Public Testnet
+
+#### Bootstrap Node (First Node)
+```bash
+npm run public-validator
+```
+
+This starts a validator node on public testnet without connecting to peers.
+
+#### Joining Nodes
+```bash
+# Full node connecting to bootstrap
+npm run public-fullnode -- --bootstrap 35.210.100.12:6001
+
+# Observer node connecting to multiple peers
+npm run observer -- --network public-testnet --bootstrap 35.210.100.12:6001,40.120.50.30:6002
+```
+
+### Custom Configuration
+```bash
+# Validator with custom ports
+PORT=4000 P2P_PORT=7001 node server.js \
+  --network public-testnet \
+  --mode validator
+
+# Full node with bootstrap
+PORT=4001 P2P_PORT=7002 node server.js \
+  --network public-testnet \
+  --mode fullnode \
+  --bootstrap 35.210.100.12:6001
+
+# Observer node
+PORT=4002 P2P_PORT=7003 node server.js \
+  --network public-testnet \
+  --mode observer \
+  --bootstrap 35.210.100.12:6001
 ```
 
 ---
 
-## Running the Network
+## Node Modes
 
-### Testnet (Default)
+### Validator Mode
+
+**Purpose**: Produce blocks and validate transactions
+
+**Requirements**:
+- Staked tokens (min: 500 SAYM on public testnet)
+- Reliable uptime
+- Good network connection
+
+**Runs**:
 ```bash
-npm run testnet
+npm run validator
+# or
+npm run public-validator
 ```
 
-**Output:**
-```
-╔════════════════════════════════════════╗
-║   SAYMAN BLOCKCHAIN - PHASE 5          ║
-║   Production Network + Explorer        ║
-╚════════════════════════════════════════╝
+**Responsibilities**:
+- ✅ Produce blocks every 5 seconds
+- ✅ Validate transactions
+- ✅ Broadcast blocks to network
+- ✅ Maintain full blockchain
+- ✅ Relay transactions
 
-🌐 NETWORK: TESTNET
-📛 Network Name: Sayman Testnet
-🔗 Chain ID: sayman-testnet-1
-🌐 API Port: 3000
-📡 P2P Port: 6001
-⏱️  Block Time: 5000ms
-💰 Block Reward: 10 SAYM
-🎯 Min Stake: 100 SAYM
-⏳ Unstake Delay: 10 blocks
-🚰 Faucet: ENABLED ✅
+**Rewards**: Block rewards + gas fees
 
-✅ API server running on http://localhost:3000
+### Full Node Mode
+
+**Purpose**: Validate and relay without producing blocks
+
+**Requirements**:
+- No staking required
+- Moderate resources
+
+**Runs**:
+```bash
+npm run fullnode -- --bootstrap PEER_IP:PORT
+# or
+npm run public-fullnode -- --bootstrap PEER_IP:PORT
 ```
+
+**Responsibilities**:
+- ✅ Validate all blocks
+- ✅ Maintain full blockchain
+- ✅ Relay transactions
+- ✅ Relay blocks
+- ❌ Does NOT produce blocks
+
+**Rewards**: None
+
+### Observer Mode
+
+**Purpose**: Read-only node for explorers/wallets
+
+**Requirements**:
+- Minimal resources
+- No staking
+
+**Runs**:
+```bash
+npm run observer -- --bootstrap PEER_IP:PORT
+```
+
+**Responsibilities**:
+- ✅ Sync blockchain
+- ✅ Provide API access
+- ❌ Does NOT validate
+- ❌ Does NOT relay
+- ❌ Does NOT produce blocks
+
+**Use Cases**:
+- Block explorers
+- Wallet backends
+- Analytics services
+
+---
+
+## Public Faucet
+
+### Starting the Faucet
+```bash
+# Default (connects to localhost:3000)
+npm run faucet
+
+# Custom API endpoint
+FAUCET_PORT=4000 API_BASE=http://35.210.100.12:3000/api npm run faucet
+
+# With custom amount
+FAUCET_AMOUNT=200 npm run faucet
+```
+
+### Using the Faucet
+
+**HTTP API:**
+```bash
+# Request tokens
+curl -X POST http://localhost:4000/request \
+  -H "Content-Type: application/json" \
+  -d '{"address":"YOUR_WALLET_ADDRESS"}'
+
+# Response
+{
+  "success": true,
+  "amount": 100,
+  "txId": "550e8400-...",
+  "message": "100 SAYM sent successfully",
+  "estimatedTime": "~5-10 seconds"
+}
+```
+
+**Check faucet status:**
+```bash
+curl http://localhost:4000/stats
+
+# Response
+{
+  "faucetAddress": "abc123...",
+  "balance": 99500,
+  "amountPerRequest": 100,
+  "remainingRequests": 995,
+  "cooldown": 600,
+  "maxDailyPerAddress": 5
+}
+```
+
+### Rate Limits
+
+- **IP Cooldown**: 10 minutes between requests
+- **Address Cooldown**: 10 minutes between requests
+- **Daily Limit**: 5 requests per address per 24 hours
+
+---
+
+## Network Discovery
+
+### How Peers Connect
+
+1. **Node starts** with bootstrap peer(s)
+2. **Connects to bootstrap** node
+3. **Sends HELLO** message with chain ID
+4. **Bootstrap validates** chain ID
+5. **If valid**, connection accepted
+6. **Node requests** peer list
+7. **Bootstrap responds** with known peers
+8. **Node connects** to discovered peers
+9. **Process repeats** until max peers reached
+
+### Peer Exchange Example
+```
+Node A starts:
+  --bootstrap 35.210.100.12:6001
+
+Node A → Bootstrap:
+  HELLO {nodeId, chainId, version}
+
+Bootstrap → Node A:
+  HELLO {nodeId, chainId, version}
+
+Node A → Bootstrap:
+  PEERS_REQUEST
+
+Bootstrap → Node A:
+  PEERS_RESPONSE {
+    peers: [
+      {ip: "40.120.50.30", port: 6002},
+      {ip: "52.210.88.15", port: 6003}
+    ]
+  }
+
+Node A connects to discovered peers
+Node A now has 3 connections
+```
+
+### Chain Synchronization
+
+When a new node joins with an empty database:
+```
+1. Node connects to network
+2. Receives block #150 announcement
+3. Realizes it's behind (has 0 blocks)
+4. Sends CHAIN_SYNC_REQUEST {currentHeight: 0}
+5. Peer responds with blocks 0-150
+6. Node validates each block sequentially
+7. Node rebuilds state deterministically
+8. Node is now synced at block #150
+```
+
+---
+
+## API Endpoints
+
+### Network Statistics
+
+**GET /api/network/stats**
+```bash
+curl http://localhost:3000/api/network/stats
+```
+
+Response:
+```json
+{
+  "network": "Sayman Public Testnet",
+  "chainId": "sayman-public-testnet-1",
+  "blockHeight": 150,
+  "validators": 4,
+  "totalStake": 2500,
+  "mempool": 5,
+  "contracts": 2,
+  "peers": 3,
+  "peerList": [...],
+  "nodeId": "abc123...",
+  "mode": "validator",
+  "averageBlockTime": 5000,
+  "uptime": 3600
+}
+```
+
+### Peer Information
+
+**GET /api/network/peers**
+```bash
+curl http://localhost:3000/api/network/peers
+```
+
+Response:
+```json
+{
+  "count": 3,
+  "peers": [
+    {
+      "nodeId": "abc123...",
+      "ip": "35.210.100.12",
+      "port": 6001,
+      "chainId": "sayman-public-testnet-1",
+      "version": "7.0.0",
+      "lastSeen": 1704067200000
+    }
+  ]
+}
+```
+
+---
+
+## Network Dashboard
+
+### Accessing the UI
 
 Open browser: `http://localhost:3000`
 
-### Mainnet
-```bash
-npm run mainnet
-```
+Click **"Network"** tab to see:
 
-**Output:**
-```
-🌐 NETWORK: MAINNET
-...
-🚰 Faucet: DISABLED ❌
-```
+**Network Stats:**
+- Connected peers count
+- Active validators
+- Block height
+- Average block time
+- Total stake
+- Mempool size
 
-**Important:** Faucet endpoints return 403 on mainnet.
-
-### Multi-Node Testnet
-```bash
-# Terminal 1
-npm run node1
-
-# Terminal 2
-npm run node2
-
-# Terminal 3
-npm run node3
-```
-
----
-
-## Project Structure
-```
-sayman-phase5/
-├── config/
-│   ├── testnet.js           # ✨ Testnet configuration
-│   ├── mainnet.js           # ✨ Mainnet configuration
-│   └── index.js             # ✨ Config loader
-│
-├── core/
-│   ├── blockchain.js        # ✨ Updated with chain ID validation
-│   ├── block.js             # ✨ Chain ID support
-│   ├── transaction.js
-│   ├── state.js
-│   ├── pos.js
-│   └── contracts.js
-│
-├── api/
-│   └── routes.js            # ✨ Explorer endpoints + faucet restriction
-│
-├── frontend/
-│   ├── index.html           # ✨ Complete explorer UI
-│   ├── style.css            # ✨ Modern Web3 styling
-│   ├── app.js               # ✨ Explorer + live updates
-│   └── crypto-client.js
-│
-├── p2p/
-│   └── server.js
-│
-├── wallet/
-│   └── wallet.js
-│
-├── server.js                # ✨ Network-aware startup
-├── package.json             # ✨ New scripts
-└── README-PHASE5.md         # This file
-```
-
----
-
-## Features
-
-### 1. Network Banner
-
-Visual indication of current network:
-- **Testnet**: Yellow banner
-- **Mainnet**: Green banner
-
-Displays:
+**Node Information:**
+- Your node ID
+- Operating mode
+- Uptime
 - Network name
 - Chain ID
 
-### 2. Dashboard
+**Peer List:**
+- Node IDs
+- IP addresses
+- Chain IDs
+- Versions
+- Last seen time
 
-**Real-time statistics:**
-- Total blocks (animated counter)
-- Active validators
-- Total stake
-- Mempool size
-- Deployed contracts
-- Block reward
-- Block time
-- Estimated APR
-
-**Live block feed:**
-- Shows last 5 blocks
-- Auto-updates every 5 seconds
-- Click to view details
-
-### 3. Explorer
-
-**Search functionality:**
-- Search by block number
-- Search by block hash
-- Search by transaction ID
-- Search by address
-
-**Block viewer:**
-- Paginated block list
-- Full block details
-- Transaction breakdown
-
-**Transaction viewer:**
-- Recent transactions
-- Transaction details
-- Block association
-
-**Address viewer:**
-- Balance and stake
-- Validator status
-- Transaction history
-
-### 4. Validators Panel
-
-**Display:**
-- Total validators
-- Total stake
-- Estimated APR
-
-**Per validator:**
-- Address
-- Stake amount (with percentage)
-- Missed blocks
-- Active/Inactive status
-- Slashed status
-
-### 5. Wallet Management
-
-**Features:**
-- Create wallet (client-side)
-- Import wallet
-- View balance and stake
-- Send transactions
-- Stake/unstake
-
-**All with client-side signing** - private keys never leave browser.
-
-### 6. Smart Contracts
-
-**Features:**
-- Deploy contracts
-- Call contract methods
-- View deployed contracts
-- Inspect contract state
-
-### 7. Faucet (Testnet Only)
-
-**Testnet:**
-- Request 1000 SAYM
-- Configurable amount
-- Cooldown period (optional)
-
-**Mainnet:**
-- Returns 403 error
-- "Faucet disabled on mainnet" message
+**Auto-updates every 3 seconds**
 
 ---
 
-## API Reference
+## CLI Usage
 
-### New Endpoints (Phase 5)
-
-#### GET /api/network
-Get network configuration.
-
-**Response:**
-```json
-{
-  "network": "Sayman Testnet",
-  "chainId": "sayman-testnet-1",
-  "faucetEnabled": true,
-  "blockTime": 5000,
-  "blockReward": 10,
-  "minStake": 100
-}
-```
-
-#### GET /api/blocks?page=1&limit=20
-Get paginated blocks.
-
-**Query Parameters:**
-- `page`: Page number (default: 1)
-- `limit`: Items per page (default: 50)
-
-**Response:**
-```json
-{
-  "blocks": [...],
-  "total": 150,
-  "page": 1,
-  "limit": 20,
-  "totalPages": 8
-}
-```
-
-#### GET /api/blocks/:index
-Get specific block by index.
-
-**Response:**
-```json
-{
-  "index": 0,
-  "timestamp": 1704067200000,
-  "transactions": [...],
-  "previousHash": "0",
-  "validator": "genesis",
-  "chainId": "sayman-testnet-1",
-  "hash": "abc123..."
-}
-```
-
-#### GET /api/transactions/:id
-Get transaction by ID.
-
-**Response:**
-```json
-{
-  "transaction": {...},
-  "blockIndex": 5,
-  "blockHash": "abc123...",
-  "timestamp": 1704067250000
-}
-```
-
-#### GET /api/address/:address
-Get address details with transaction history.
-
-**Response:**
-```json
-{
-  "address": "abc123...",
-  "balance": 1000,
-  "stake": 500,
-  "unstaking": false,
-  "unlockBlock": null,
-  "transactions": [...],
-  "isValidator": true,
-  "validatorInfo": {...}
-}
-```
-
-#### GET /api/search/:query
-Search blockchain by block, transaction, or address.
-
-**Response:**
-```json
-{
-  "type": "block|transaction|address",
-  "result": {...}
-}
-```
-
-### Updated Endpoints
-
-#### POST /api/faucet
-Now checks network configuration.
-
-**Testnet Response:**
-```json
-{
-  "success": true,
-  "amount": 1000,
-  "message": "1000 SAYM credited (pending in mempool)"
-}
-```
-
-**Mainnet Response (403):**
-```json
-{
-  "error": "Faucet is disabled on mainnet",
-  "message": "Faucet is only available on testnet"
-}
-```
-
----
-
-## Testing
-
-### Automated Test
+### Network Commands
 ```bash
-chmod +x test-phase5.sh
-./test-phase5.sh
+# View network info
+sayman network
+
+# List validators
+sayman validators
+
+# Check balance
+sayman balance
+
+# Send transaction (relayed across network)
+sayman send 0xRECIPIENT 100
+
+# Stake (become validator)
+sayman stake 500
 ```
 
-Tests:
-1. ✅ Network configuration
-2. ✅ Network detection (testnet/mainnet)
-3. ✅ Stats endpoint
-4. ✅ Faucet restriction
-5. ✅ Balance checking
-6. ✅ Address details
-7. ✅ Block pagination
-8. ✅ Single block retrieval
-9. ✅ Validators
-10. ✅ Search functionality
-11. ✅ Contracts
-12. ✅ Mempool
+All transactions are automatically broadcast to connected peers.
 
-### Manual UI Testing
+---
 
-1. **Dashboard Test:**
-   - Open `http://localhost:3000`
-   - Verify stats update every 3 seconds
-   - Check live block feed updates every 5 seconds
-   - Verify animated counters
+## Deployment Guide
 
-2. **Explorer Test:**
-   - Click "Explorer"
-   - Test search with block number: `0`
-   - Test pagination
-   - Click on a block to view details
+### Cloud Deployment (AWS/GCP/Azure)
 
-3. **Validator Test:**
-   - Click "Validators"
-   - Verify validator list loads
-   - Check stake percentages
-   - View validator details
+#### 1. Launch Instance
 
-4. **Wallet Test:**
-   - Click "Wallet"
-   - Create new wallet
-   - Verify private key stays in browser (check Network tab)
-   - Import wallet with private key
+**Specs:**
+- 2 vCPU
+- 4GB RAM
+- 20GB SSD
+- Ubuntu 22.04 LTS
 
-5. **Faucet Test (Testnet):**
-   - Click "Faucet"
-   - Enter address
-   - Claim tokens
-   - Verify balance updates
+#### 2. Configure Firewall
 
-6. **Mainnet Faucet Test:**
-   - Stop testnet node
-   - Run `npm run mainnet`
-   - Try to access faucet
-   - Should see "Faucet disabled" message
-   - Verify faucet nav button is hidden
+**AWS Security Group:**
+```
+Inbound Rules:
+- Port 3000: 0.0.0.0/0 (API)
+- Port 6001: 0.0.0.0/0 (P2P)
+- Port 4000: 0.0.0.0/0 (Faucet, optional)
+- Port 22: YOUR_IP/32 (SSH)
+```
 
-### Network Separation Test
+**GCP Firewall Rules:**
 ```bash
-# Test 1: Start Testnet
-npm run testnet
-# Open browser, verify yellow banner says "Sayman Testnet"
-# Try faucet - should work ✅
+gcloud compute firewall-rules create sayman-api \
+  --allow tcp:3000
 
-# Test 2: Switch to Mainnet
-# Stop node (Ctrl+C)
-npm run mainnet
-# Open browser, verify green banner says "Sayman Mainnet"
-# Try faucet - should fail with 403 ❌
-
-# Test 3: Chain ID Validation
-# Start testnet node
-npm run testnet
-# In another terminal, try to connect mainnet peer
-# Should reject due to chain ID mismatch
+gcloud compute firewall-rules create sayman-p2p \
+  --allow tcp:6001
 ```
 
----
-
-## Configuration Guide
-
-### Creating Custom Network
-
-1. **Create config file:**
-```javascript
-// config/custom.js
-export default {
-  networkName: 'My Custom Network',
-  chainId: 'custom-network-1',
-  port: 4000,
-  p2pPort: 7001,
-  blockTime: 8000,
-  blockReward: 7,
-  minStake: 500,
-  faucetEnabled: true,
-  faucetAmount: 500,
-  genesisAllocations: {
-    'faucet': 5000000,
-    'validator1': 2000
-  },
-  genesisStakes: {
-    'validator1': 1000
-  }
-};
-```
-
-2. **Add to config/index.js:**
-```javascript
-import custom from './custom.js';
-
-const configs = {
-  testnet,
-  mainnet,
-  custom  // Add here
-};
-```
-
-3. **Run:**
+#### 3. Install Dependencies
 ```bash
-NODE_ENV=custom npm start
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install build tools
+sudo apt install -y build-essential git
+
+# Clone project
+git clone https://github.com/yourrepo/sayman.git
+cd sayman
+
+# Run deployment script
+chmod +x scripts/deploy-node.sh
+./scripts/deploy-node.sh
 ```
 
-### Environment Variables
-
-Override config with environment variables:
+#### 4. Start Node
 ```bash
-# Override port
-PORT=4000 npm run testnet
+# Using systemd (recommended)
+sudo systemctl start sayman
+sudo systemctl status sayman
 
-# Override P2P port
-P2P_PORT=7001 npm run testnet
-
-# Add peers
-PEERS=ws://peer1:6001,ws://peer2:6002 npm run testnet
-
-# Custom network
-NODE_ENV=custom PORT=4000 P2P_PORT=7001 node server.js
+# Or manually with screen/tmux
+screen -S sayman
+npm run public-validator
+# Ctrl+A, D to detach
 ```
 
----
+#### 5. Monitor
+```bash
+# View logs
+sudo journalctl -u sayman -f
 
-## Differences: Testnet vs Mainnet
+# Check peers
+curl http://localhost:3000/api/network/peers
 
-| Feature | Testnet | Mainnet |
-|---------|---------|---------|
-| Chain ID | `sayman-testnet-1` | `sayman-mainnet-1` |
-| Block Time | 5 seconds | 10 seconds |
-| Block Reward | 10 SAYM | 5 SAYM |
-| Min Stake | 100 SAYM | 1000 SAYM |
-| Unstake Delay | 10 blocks | 100 blocks |
-| Faucet | ✅ Enabled | ❌ Disabled |
-| Initial Supply | 10M SAYM (faucet) | 1M SAYM |
-| Slash % | 5% | 10% |
-| Banner Color | Yellow | Green |
-| Use Case | Development | Production |
-
----
-
-## Security Features
-
-### Chain ID Validation
-Prevents nodes from different networks connecting:
-```javascript
-// Block validation
-if (block.chainId !== this.chainId) {
-  throw new Error('Chain ID mismatch');
-}
-
-// Peer connection
-if (peer.chainId !== this.chainId) {
-  reject('Wrong network');
-}
+# Check status
+curl http://localhost:3000/api/network/stats
 ```
 
-### Faucet Restriction
-Enforced at API level:
-```javascript
-if (!config.faucetEnabled) {
-  return res.status(403).json({
-    error: 'Faucet disabled on mainnet'
-  });
-}
+### Multiple Nodes Setup
+
+**Bootstrap Node (Node 1):**
+```bash
+# Server 1: 35.210.100.12
+npm run public-validator
 ```
 
-### Client-Side Signing
-All transactions signed in browser:
-- Private keys never transmitted
-- Server only sees signed transactions
-- Zero-trust architecture
+**Full Node (Node 2):**
+```bash
+# Server 2: 40.120.50.30
+npm run public-fullnode -- --bootstrap 35.210.100.12:6001
+```
 
----
+**Observer Node (Node 3):**
+```bash
+# Server 3: 52.210.88.15
+npm run observer -- --network public-testnet --bootstrap 35.210.100.12:6001
+```
 
-## UI Features
-
-### Animations
-- Counter increments (scale effect)
-- Block slides (slide-in from left)
-- Card hovers (lift effect)
-- Page transitions (fade-in)
-
-### Responsive Design
-- Mobile-friendly navigation
-- Flexible grid layouts
-- Touch-optimized buttons
-- Readable on all screen sizes
-
-### Dark Theme
-- Easy on the eyes
-- Professional appearance
-- Reduced eye strain
-- Battery friendly (OLED)
-
-### Live Updates
-- Stats update every 3 seconds
-- Blocks update every 5 seconds
-- Smooth transitions
-- No page reloads needed
+**Faucet Server:**
+```bash
+# Any server
+API_BASE=http://35.210.100.12:3000/api npm run faucet
+```
 
 ---
 
 ## Troubleshooting
 
-### Issue: Faucet not working
-**Solution:**
-1. Check network: `curl http://localhost:3000/api/network | jq '.faucetEnabled'`
-2. If `false`, you're on mainnet
-3. Switch to testnet: `npm run testnet`
+### Peers Not Connecting
 
-### Issue: UI not updating
-**Solution:**
-1. Check browser console for errors
-2. Verify API is running: `curl http://localhost:3000/api/stats`
-3. Hard refresh: Ctrl+F5 (Windows) or Cmd+Shift+R (Mac)
+**Symptom:** Peer count stays at 0
 
-### Issue: Chain ID mismatch
-**Solution:**
-1. Delete database: `rm -rf data/`
-2. Restart node
-3. This rebuilds genesis with correct chain ID
+**Check:**
+```bash
+# Firewall
+sudo ufw status
+sudo ufw allow 6001/tcp
 
-### Issue: Peers not connecting
+# Listening
+netstat -tuln | grep 6001
+
+# Logs
+tail -f logs/node1.log
+```
+
 **Solution:**
-1. Check chain IDs match
-2. Verify P2P ports are open
-3. Check PEERS environment variable format
+- Verify firewall rules
+- Check bootstrap peer is reachable
+- Ensure correct chain ID
+- Verify ports are open
+
+### Chain Not Syncing
+
+**Symptom:** Block height not increasing
+
+**Check:**
+```bash
+curl http://localhost:3000/api/network/stats | jq '.blockHeight'
+```
+
+**Solution:**
+```bash
+# Stop node
+pkill -f "node server.js"
+
+# Delete database
+rm -rf data/
+
+# Restart with bootstrap
+npm run fullnode -- --bootstrap WORKING_PEER:6001
+```
+
+### "Chain ID Mismatch"
+
+**Symptom:** Peers rejected with chain ID error
+
+**Cause:** Connecting to wrong network
+
+**Solution:**
+- Verify network flag: `--network public-testnet`
+- Check config file chain ID
+- Ensure all nodes use same network
+
+### High Memory Usage
+
+**Symptom:** Node crashes with OOM
+
+**Solution:**
+```bash
+# Increase Node.js memory
+NODE_OPTIONS="--max-old-space-size=4096" npm run fullnode
+```
+
+### Faucet Empty
+
+**Symptom:** Faucet returns "Faucet is empty"
+
+**Solution:**
+```bash
+# Check faucet balance
+curl http://localhost:4000/stats
+
+# Fund faucet wallet
+sayman send FAUCET_ADDRESS 10000
+```
 
 ---
 
-## Production Checklist
+## Network Configuration
 
-Before deploying to production:
+### Public Testnet Settings
+```javascript
+{
+  networkName: 'Sayman Public Testnet',
+  chainId: 'sayman-public-testnet-1',
+  blockTime: 5000,
+  blockReward: 10,
+  minStake: 500,
+  faucetAmount: 100,
+  maxPeers: 50
+}
+```
 
-- [ ] Use mainnet configuration
-- [ ] Disable faucet (verified)
-- [ ] Set appropriate min stake
-- [ ] Configure proper genesis allocations
-- [ ] Set stable block time (10s+)
-- [ ] Configure proper P2P peers
-- [ ] Set up monitoring
-- [ ] Enable HTTPS
-- [ ] Configure firewall
-- [ ] Set up backups
-- [ ] Test chain ID validation
-- [ ] Test faucet restriction
-- [ ] Verify deterministic rebuild
-- [ ] Load test network
-- [ ] Security audit
+### Creating Custom Network
+
+1. Copy `config/public-testnet.js`
+2. Modify parameters
+3. Change `chainId` (important!)
+4. Run with `--network custom`
 
 ---
 
-## Roadmap
+## Security Considerations
 
-### Phase 5 ✅ Complete
-- Network configuration
-- Faucet restriction
-- Blockchain explorer
-- Web3 UI
-- Live updates
+### Chain ID Validation ✅
+Prevents connecting to wrong networks
 
-### Future Phases (Ideas)
-- **Phase 6**: WebSocket real-time updates
-- **Phase 7**: Advanced contract features (events, logs)
-- **Phase 8**: Mobile app
-- **Phase 9**: Cross-chain bridges
-- **Phase 10**: ZK proofs
+### Peer Limits ✅
+Max 50 peers prevents DoS
+
+### Rate Limiting ✅
+Faucet protects against abuse
+
+### Heartbeat System ✅
+Removes stale peers automatically
+
+### Still Missing (Production)
+- ❌ Peer reputation system
+- ❌ DDoS protection
+- ❌ Encrypted connections
+- ❌ NAT traversal
+- ❌ Sybil attack prevention
+
+**Use for testing/education only**
+
+---
+
+## Performance
+
+### Benchmarks (3-Node Local Network)
+
+- Block propagation: ~100-200ms
+- Transaction broadcast: ~50-100ms
+- Peer discovery: ~2-5 seconds
+- Full chain sync: ~10-30 seconds (1000 blocks)
+
+### Recommended Specs
+
+**Validator:**
+- 4 vCPU
+- 8GB RAM
+- 50GB SSD
+- 100 Mbps network
+
+**Full Node:**
+- 2 vCPU
+- 4GB RAM
+- 30GB SSD
+- 50 Mbps network
+
+**Observer:**
+- 1 vCPU
+- 2GB RAM
+- 20GB SSD
+- 25 Mbps network
+
+---
+
+## Project Structure
+```
+sayman-phase7/
+├── config/
+│   ├── testnet.js
+│   ├── mainnet.js
+│   ├── public-testnet.js    ✨ NEW
+│   └── index.js              ✨ Updated
+├── core/
+│   └── ... (unchanged)
+├── p2p/
+│   ├── server.js             ✨ Rewritten
+│   └── peerManager.js        ✨ NEW
+├── faucet/                   ✨ NEW
+│   ├── server.js
+│   └── package.json
+├── scripts/
+│   ├── deploy-node.sh        ✨ NEW
+│   ├── test-p2p.sh           ✨ NEW
+│   └── generateDocs.js
+├── frontend/
+│   ├── index.html            ✨ Updated (network page)
+│   ├── app.js                ✨ Updated (network stats)
+│   └── style.css             ✨ Updated
+├── server.js                 ✨ Updated (modes, bootstrap)
+├── package.json              ✨ Updated
+└── README-PHASE7.md          ✨ NEW
+```
+
+---
+
+## Migration from Phase 6
+
+### Breaking Changes
+
+**P2P Protocol:**
+- New message format
+- Chain ID validation
+- Node ID generation
+
+**Configuration:**
+- New `--mode` flag
+- New `--bootstrap` flag
+- New `--network` options
+
+### Upgrade Steps
+```bash
+# 1. Backup
+cp -r data/ data_backup/
+
+# 2. Update code
+git pull origin phase7
+
+# 3. Install dependencies
+npm install
+cd faucet && npm install && cd ..
+
+# 4. Clean database (fresh start)
+rm -rf data/
+
+# 5. Start with new flags
+npm run public-validator
+```
 
 ---
 
@@ -711,11 +820,11 @@ MIT
 
 ## Version
 
-5.0.0 - Phase 5 Complete
+7.0.0 - Phase 7 Complete
 
 ---
 
-**Sayman Blockchain Phase 5**  
-*Production-Ready Network Separation + Explorer + Web3 UI*
+**Sayman Blockchain - Phase 7**  
+*True Distributed Public Network*
 
-Built with ❤️ for blockchain innovation
+Built for real-world P2P blockchain deployment 🌐⛓️

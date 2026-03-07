@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 </head>
+
 <body>
   <!-- Network Banner -->
   <div id="network-banner" class="network-banner">
@@ -30,6 +32,7 @@
         <button onclick="showPage('wallet')" class="nav-btn">👛 Wallet</button>
         <button onclick="showPage('contracts')" class="nav-btn">📜 Contracts</button>
         <button onclick="showPage('faucet')" class="nav-btn" id="faucet-nav">🚰 Faucet</button>
+        <button onclick="showPage('network')" class="nav-btn">🌐 Network</button>
       </div>
     </div>
   </nav>
@@ -120,7 +123,8 @@
       <!-- Tabs -->
       <div class="explorer-tabs">
         <button onclick="showExplorerTab('blocks')" class="tab-btn active" id="tab-blocks">Blocks</button>
-        <button onclick="showExplorerTab('transactions')" class="tab-btn" id="tab-transactions">Recent Transactions</button>
+        <button onclick="showExplorerTab('transactions')" class="tab-btn" id="tab-transactions">Recent
+          Transactions</button>
       </div>
 
       <!-- Blocks Tab -->
@@ -162,7 +166,7 @@
     <!-- Wallet Page -->
     <div id="wallet" class="page">
       <h2>Wallet Management</h2>
-      
+
       <div class="wallet-actions">
         <button onclick="createWallet()" class="btn-primary">Create New Wallet</button>
         <button onclick="importWallet()" class="btn-secondary">Import Wallet</button>
@@ -213,7 +217,7 @@
         <input type="number" id="stake-amount" placeholder="Amount to Stake">
         <input type="password" id="stake-key" placeholder="Your Private Key">
         <button onclick="stakeTokens()" class="btn-primary">Stake</button>
-        
+
         <h3 style="margin-top: 2rem;">Unstake</h3>
         <input type="password" id="unstake-key" placeholder="Your Private Key">
         <button onclick="unstakeTokens()" class="btn-secondary">Unstake</button>
@@ -263,6 +267,75 @@
         <div id="faucet-result" class="result"></div>
       </div>
     </div>
+
+    <!-- Network Page -->
+    <div id="network" class="page">
+      <h2>Network Status</h2>
+
+      <!-- Network Stats -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">🌐</div>
+          <div class="stat-content">
+            <h3 id="net-peers" class="stat-value">0</h3>
+            <p class="stat-label">Connected Peers</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">👥</div>
+          <div class="stat-content">
+            <h3 id="net-validators" class="stat-value">0</h3>
+            <p class="stat-label">Active Validators</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📦</div>
+          <div class="stat-content">
+            <h3 id="net-height" class="stat-value">0</h3>
+            <p class="stat-label">Block Height</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">⚡</div>
+          <div class="stat-content">
+            <h3 id="net-blocktime" class="stat-value">0</h3>
+            <p class="stat-label">Avg Block Time (ms)</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">💰</div>
+          <div class="stat-content">
+            <h3 id="net-stake" class="stat-value">0</h3>
+            <p class="stat-label">Total Stake</p>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">⏳</div>
+          <div class="stat-content">
+            <h3 id="net-mempool" class="stat-value">0</h3>
+            <p class="stat-label">Mempool Size</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Node Information -->
+      <div class="section">
+        <h3>This Node</h3>
+        <div class="info-box">
+          <p><strong>Node ID:</strong> <span id="node-id">Loading...</span></p>
+          <p><strong>Mode:</strong> <span id="node-mode">Loading...</span></p>
+          <p><strong>Uptime:</strong> <span id="node-uptime">Loading...</span></p>
+          <p><strong>Network:</strong> <span id="node-network">Loading...</span></p>
+          <p><strong>Chain ID:</strong> <span id="node-chainid">Loading...</span></p>
+        </div>
+      </div>
+
+      <!-- Peer List -->
+      <div class="section">
+        <h3>Connected Peers</h3>
+        <div id="peer-list"></div>
+      </div>
+    </div>
   </main>
 
   <!-- Footer -->
@@ -276,4 +349,5 @@
   <script src="crypto-client.js"></script>
   <script src="app.js"></script>
 </body>
+
 </html>
