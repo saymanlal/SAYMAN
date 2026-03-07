@@ -109,26 +109,3 @@ class StateEngine {
 }
 
 export default StateEngine;
-```
-
-## Update Environment Variables in Render
-
-### For SAYMAN service (main blockchain):
-
-Go to Render Dashboard → **SAYMAN** service → **Environment**
-
-Add/Update these variables:
-```
-NODE_ENV = production
-PORT = 10000
-```
-
-### For sayman-faucet service:
-
-Go to Render Dashboard → **sayman-faucet** service → **Environment**
-
-Add/Update these variables:
-```
-API_BASE = https://sayman.onrender.com/api
-FAUCET_PORT = 10000
-FAUCET_AMOUNT = 100
