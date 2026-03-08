@@ -2,6 +2,7 @@ import { Level } from 'level';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 import Block from './block.js';
 import Transaction from './transaction.js';
 import StateEngine from './state.js';
@@ -19,11 +20,9 @@ class Blockchain {
     this.chainId = config.chainId;
     this.networkName = config.networkName || 'Sayman Network';
     
-    // Determine if running in production (Render.com or similar)
     const isProduction = process.env.NODE_ENV === 'production' || 
                          process.env.RENDER === 'true';
     
-    // Database path - use /tmp for Render.com ephemeral storage
     const dbPath = isProduction
       ? '/tmp/sayman-data'
       : path.join(process.cwd(), 'data');
@@ -35,14 +34,12 @@ class Blockchain {
     this.chain = [];
     this.mempool = [];
     
-    // State management
     this.state = new StateEngine();
     this.pos = new PoS(config);
     this.contracts = new ContractEngine();
     this.gasCalculator = new GasCalculator(config);
     this.nonceManager = new NonceManager();
     
-    // Rate limiting
     this.addressLastTx = new Map();
     this.txRateLimit = 10;
     this.rateLimitWindow = 60000;
@@ -52,11 +49,9 @@ class Blockchain {
     console.log('🔄 Initializing blockchain...');
     
     try {
-      // Determine if running in production
       const isProduction = process.env.NODE_ENV === 'production' || 
                            process.env.RENDER === 'true';
       
-      // Ensure data directory exists
       const dataDir = isProduction
         ? '/tmp/sayman-data'
         : path.join(process.cwd(), 'data');
@@ -68,7 +63,6 @@ class Blockchain {
         console.log(`✅ Created directory: ${dataDir}`);
       }
 
-      // Open database with error handling
       if (!this.db || this.db.status !== 'open') {
         try {
           await this.db.open();
@@ -82,7 +76,6 @@ class Blockchain {
         }
       }
 
-      // Load existing chain or create genesis
       try {
         const chainData = await this.db.get('blockchain');
         console.log('📚 Loading existing blockchain...');
@@ -125,6 +118,7 @@ class Blockchain {
   async createGenesisBlock() {
     const genesisTransactions = [];
 
+    // Genesis allocations
     Object.entries(this.config.genesisAllocations || {}).forEach(([address, amount]) => {
       const tx = new Transaction({
         type: 'GENESIS',
@@ -138,18 +132,33 @@ class Blockchain {
       this.state.addBalance(address, amount);
     });
 
-    Object.entries(this.config.genesisStakes || {}).forEach(([address, amount]) => {
+    // Genesis stakes - CREATE REAL VALIDATORS
+    Object.entries(this.config.genesisStakes || {}).forEach(([addressKey, amount]) => {
+      // Generate a real 40-char hex address for genesis validator
+      const validatorAddress = crypto
+        .createHash('sha256')
+        .update('genesis-validator-' + addressKey + '-' + this.chainId)
+        .digest('hex')
+        .substring(0, 40);
+      
+      // Give validator initial balance (2x stake for gas fees)
+      this.state.addBalance(validatorAddress, amount * 2);
+      
       const tx = new Transaction({
         type: 'STAKE',
-        data: { from: address, amount },
+        data: { from: validatorAddress, amount },
         timestamp: Date.now(),
         gasLimit: 0,
         gasPrice: 0,
         nonce: 0
       });
       genesisTransactions.push(tx);
-      this.state.stake(address, amount);
-      this.pos.addValidator(address, amount);
+      
+      // Actually stake and add as validator
+      this.state.stake(validatorAddress, amount);
+      this.pos.addValidator(validatorAddress, amount);
+      
+      console.log(`✓ Genesis validator created: ${validatorAddress.substring(0, 8)}... with ${amount} SAYM stake`);
     });
 
     const genesisBlock = new Block(
@@ -420,14 +429,24 @@ class Blockchain {
   }
 
   getStats() {
+    const validatorCount = this.pos && this.pos.validators ? this.pos.validators.size : 0;
+    const contractCount = this.contracts && this.contracts.contracts instanceof Map 
+      ? this.contracts.contracts.size 
+      : 0;
+    
+    let totalStake = 0;
+    if (this.pos && this.pos.validators) {
+      totalStake = Array.from(this.pos.validators.values()).reduce((sum, v) => sum + v.stake, 0);
+    }
+
     return {
       network: this.networkName,
       chainId: this.chainId,
       blocks: this.chain.length,
       mempool: this.mempool.length,
-      validators: this.pos.validators.size,
-      totalStake: Array.from(this.pos.validators.values()).reduce((sum, v) => sum + v.stake, 0),
-      contracts: this.contracts.contracts.size
+      validators: validatorCount,
+      totalStake: totalStake,
+      contracts: contractCount
     };
   }
 
