@@ -65,14 +65,3 @@ class Block {
 }
 
 export default Block;
-```
-
----
-
-## RENDER CONFIGURATION
-
-### Service 1: SAYMAN (Main Blockchain)
-
-**Dashboard → SAYMAN → Settings → Start Command:**
-```
-node server.js --network public-testnet --mode validator
