@@ -1,353 +1,439 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sayman Blockchain Explorer</title>
-  <link rel="stylesheet" href="style.css">
+  <title>Sayman Blockchain Network</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+  <style>
+    :root {
+      --mono-000: #000000;
+      --mono-100: #1a1a1a;
+      --mono-200: #333333;
+      --mono-300: #4d4d4d;
+      --mono-400: #666666;
+      --mono-500: #808080;
+      --mono-600: #999999;
+      --mono-700: #b3b3b3;
+      --mono-800: #cccccc;
+      --mono-900: #e6e6e6;
+      --mono-950: #f5f5f5;
+      --mono-1000: #ffffff;
+      --grid: 8px;
+      --border: 1px solid var(--mono-800);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--mono-100);
+      background: var(--mono-1000);
+      letter-spacing: -0.01em;
+    }
+
+    .container {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: calc(var(--grid) * 4);
+    }
+
+    h1 { font-size: 32px; font-weight: 500; letter-spacing: -0.02em; margin-bottom: calc(var(--grid) * 2); }
+    h2 { font-size: 24px; font-weight: 500; letter-spacing: -0.02em; margin-bottom: calc(var(--grid) * 2); }
+    h3 { font-size: 18px; font-weight: 500; margin-bottom: calc(var(--grid) * 2); }
+
+    .header {
+      border-bottom: var(--border);
+      padding-bottom: calc(var(--grid) * 4);
+      margin-bottom: calc(var(--grid) * 4);
+    }
+
+    .header-title { font-size: 32px; margin-bottom: calc(var(--grid) * 1); }
+    .header-subtitle { color: var(--mono-400); font-size: 14px; }
+
+    .header-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: calc(var(--grid) * 2);
+      margin-top: calc(var(--grid) * 3);
+    }
+
+    .meta-item {
+      display: flex;
+      justify-content: space-between;
+      padding: calc(var(--grid) * 2);
+      border: var(--border);
+      font-size: 12px;
+    }
+
+    .meta-label { color: var(--mono-400); text-transform: uppercase; letter-spacing: 0.05em; }
+    .meta-value { font-weight: 500; font-variant-numeric: tabular-nums; }
+
+    .nav {
+      border-bottom: var(--border);
+      margin-bottom: calc(var(--grid) * 4);
+    }
+
+    .nav-list {
+      display: flex;
+      list-style: none;
+      overflow-x: auto;
+    }
+
+    .nav-item {
+      border-right: var(--border);
+    }
+
+    .nav-item:last-child { border-right: none; }
+
+    .nav-btn {
+      display: block;
+      padding: calc(var(--grid) * 2) calc(var(--grid) * 3);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--mono-400);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      transition: all 0.15s;
+    }
+
+    .nav-btn:hover { background: var(--mono-950); color: var(--mono-100); }
+    .nav-btn.active { background: var(--mono-100); color: var(--mono-1000); }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: calc(var(--grid) * 2);
+      margin-bottom: calc(var(--grid) * 4);
+    }
+
+    .stat-card {
+      border: var(--border);
+      padding: calc(var(--grid) * 3);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--mono-400);
+      margin-bottom: calc(var(--grid) * 1);
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 400;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-unit {
+      font-size: 14px;
+      color: var(--mono-400);
+      margin-left: calc(var(--grid) * 1);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-bottom: calc(var(--grid) * 4);
+    }
+
+    thead {
+      border-bottom: var(--border);
+    }
+
+    th {
+      text-align: left;
+      padding: calc(var(--grid) * 2);
+      font-weight: 500;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--mono-400);
+    }
+
+    td {
+      padding: calc(var(--grid) * 2);
+      border-bottom: 1px solid var(--mono-900);
+      font-variant-numeric: tabular-nums;
+    }
+
+    tr:hover { background: var(--mono-950); }
+
+    .mono { font-family: 'SF Mono', 'Consolas', monospace; font-size: 12px; }
+
+    .section {
+      margin-bottom: calc(var(--grid) * 6);
+    }
+
+    .section-header {
+      border-bottom: var(--border);
+      padding-bottom: calc(var(--grid) * 2);
+      margin-bottom: calc(var(--grid) * 3);
+    }
+
+    .block-feed {
+      max-height: 600px;
+      overflow-y: auto;
+      border: var(--border);
+    }
+
+    .block-item {
+      padding: calc(var(--grid) * 2);
+      border-bottom: 1px solid var(--mono-900);
+      display: grid;
+      grid-template-columns: 80px 1fr 120px;
+      gap: calc(var(--grid) * 2);
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .block-item:hover {
+      background: var(--mono-950);
+    }
+
+    .block-index {
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .block-hash {
+      font-family: 'SF Mono', monospace;
+      font-size: 11px;
+      color: var(--mono-400);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .block-time {
+      text-align: right;
+      font-size: 11px;
+      color: var(--mono-400);
+    }
+
+    @media (max-width: 768px) {
+      .stats-grid { grid-template-columns: 1fr; }
+      .header-meta { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
-
 <body>
-  <!-- Network Banner -->
-  <div id="network-banner" class="network-banner">
-    <div class="container">
-      <span id="network-name">Loading...</span>
-      <span id="chain-id"></span>
-    </div>
-  </div>
-
-  <!-- Navigation -->
-  <nav>
-    <div class="container">
-      <div class="nav-brand">
-        <h1>⛓️ SAYMAN</h1>
-        <span class="version">Phase 5</span>
+  <div class="container">
+    <header class="header">
+      <h1 class="header-title">SAYMAN BLOCKCHAIN</h1>
+      <p class="header-subtitle">Decentralized Network Infrastructure / Public Testnet</p>
+      
+      <div class="header-meta">
+        <div class="meta-item">
+          <span class="meta-label">Network</span>
+          <span class="meta-value" id="header-network">Loading...</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Chain ID</span>
+          <span class="meta-value mono" id="header-chain">Loading...</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Node ID</span>
+          <span class="meta-value mono" id="header-node">Loading...</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Mode</span>
+          <span class="meta-value" id="header-mode">Loading...</span>
+        </div>
       </div>
-      <div class="nav-links">
-        <button onclick="showPage('dashboard')" class="nav-btn">📊 Dashboard</button>
-        <button onclick="showPage('explorer')" class="nav-btn">🔍 Explorer</button>
-        <button onclick="showPage('validators')" class="nav-btn">👥 Validators</button>
-        <button onclick="showPage('wallet')" class="nav-btn">👛 Wallet</button>
-        <button onclick="showPage('contracts')" class="nav-btn">📜 Contracts</button>
-        <button onclick="showPage('faucet')" class="nav-btn" id="faucet-nav">🚰 Faucet</button>
-        <button onclick="showPage('network')" class="nav-btn">🌐 Network</button>
-      </div>
-    </div>
-  </nav>
+    </header>
 
-  <main class="container">
-    <!-- Dashboard Page -->
+    <nav class="nav">
+      <ul class="nav-list">
+        <li class="nav-item">
+          <button class="nav-btn active" onclick="showPage('dashboard')">Dashboard</button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-btn" onclick="showPage('explorer')">Explorer</button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-btn" onclick="showPage('validators')">Validators</button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-btn" onclick="showPage('contracts')">Contracts</button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-btn" onclick="showPage('network')">Network</button>
+        </li>
+      </ul>
+    </nav>
+
     <div id="dashboard" class="page active">
-      <h2>Network Dashboard</h2>
-
-      <!-- Live Stats Grid -->
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-icon">📦</div>
-          <div class="stat-content">
-            <h3 id="stat-blocks" class="stat-value">0</h3>
-            <p class="stat-label">Total Blocks</p>
-          </div>
+          <div class="stat-label">Total Blocks</div>
+          <div class="stat-value" id="stat-blocks">0</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">👥</div>
-          <div class="stat-content">
-            <h3 id="stat-validators" class="stat-value">0</h3>
-            <p class="stat-label">Validators</p>
-          </div>
+          <div class="stat-label">Validators</div>
+          <div class="stat-value" id="stat-validators">0</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">🔒</div>
-          <div class="stat-content">
-            <h3 id="stat-stake" class="stat-value">0</h3>
-            <p class="stat-label">Total Stake</p>
-          </div>
+          <div class="stat-label">Total Stake</div>
+          <div class="stat-value" id="stat-stake">0<span class="stat-unit">SAYM</span></div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">⏳</div>
-          <div class="stat-content">
-            <h3 id="stat-mempool" class="stat-value">0</h3>
-            <p class="stat-label">Mempool</p>
-          </div>
+          <div class="stat-label">Mempool</div>
+          <div class="stat-value" id="stat-mempool">0</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">📜</div>
-          <div class="stat-content">
-            <h3 id="stat-contracts" class="stat-value">0</h3>
-            <p class="stat-label">Contracts</p>
-          </div>
+          <div class="stat-label">Contracts</div>
+          <div class="stat-value" id="stat-contracts">0</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">💰</div>
-          <div class="stat-content">
-            <h3 id="stat-reward" class="stat-value">0</h3>
-            <p class="stat-label">Block Reward</p>
-          </div>
+          <div class="stat-label">Block Reward</div>
+          <div class="stat-value" id="stat-reward">10<span class="stat-unit">SAYM</span></div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">⏱️</div>
-          <div class="stat-content">
-            <h3 id="stat-blocktime" class="stat-value">0</h3>
-            <p class="stat-label">Block Time (s)</p>
-          </div>
+          <div class="stat-label">Block Time</div>
+          <div class="stat-value" id="stat-blocktime">5<span class="stat-unit">s</span></div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">📈</div>
-          <div class="stat-content">
-            <h3 id="stat-apr" class="stat-value">0%</h3>
-            <p class="stat-label">Est. APR</p>
-          </div>
+          <div class="stat-label">Est. APR</div>
+          <div class="stat-value" id="stat-apr">0<span class="stat-unit">%</span></div>
         </div>
       </div>
 
-      <!-- Live Block Feed -->
       <div class="section">
-        <h3>Live Block Feed</h3>
-        <div id="live-blocks" class="live-blocks"></div>
+        <div class="section-header">
+          <h2>Live Block Feed</h2>
+        </div>
+        <div class="block-feed" id="block-feed"></div>
       </div>
     </div>
 
-    <!-- Explorer Page -->
     <div id="explorer" class="page">
-      <h2>Blockchain Explorer</h2>
-
-      <!-- Search -->
-      <div class="search-box">
-        <input type="text" id="search-input" placeholder="Search by block number, hash, transaction ID, or address...">
-        <button onclick="searchBlockchain()" class="btn-primary">Search</button>
-      </div>
-      <div id="search-result" class="search-result"></div>
-
-      <!-- Tabs -->
-      <div class="explorer-tabs">
-        <button onclick="showExplorerTab('blocks')" class="tab-btn active" id="tab-blocks">Blocks</button>
-        <button onclick="showExplorerTab('transactions')" class="tab-btn" id="tab-transactions">Recent
-          Transactions</button>
-      </div>
-
-      <!-- Blocks Tab -->
-      <div id="explorer-blocks" class="explorer-tab active">
-        <div id="blocks-list"></div>
-        <div class="pagination" id="blocks-pagination"></div>
-      </div>
-
-      <!-- Transactions Tab -->
-      <div id="explorer-transactions" class="explorer-tab">
-        <div id="transactions-list"></div>
-      </div>
-    </div>
-
-    <!-- Validators Page -->
-    <div id="validators" class="page">
-      <h2>Validator Network</h2>
-
-      <!-- Validator Stats -->
-      <div class="validator-stats">
-        <div class="stat-box">
-          <h4>Total Validators</h4>
-          <p id="total-validators">0</p>
-        </div>
-        <div class="stat-box">
-          <h4>Total Stake</h4>
-          <p id="total-stake-val">0 SAYM</p>
-        </div>
-        <div class="stat-box">
-          <h4>Estimated APR</h4>
-          <p id="validator-apr">0%</p>
-        </div>
-      </div>
-
-      <!-- Validators List -->
-      <div id="validators-list"></div>
-    </div>
-
-    <!-- Wallet Page -->
-    <div id="wallet" class="page">
-      <h2>Wallet Management</h2>
-
-      <div class="wallet-actions">
-        <button onclick="createWallet()" class="btn-primary">Create New Wallet</button>
-        <button onclick="importWallet()" class="btn-secondary">Import Wallet</button>
-      </div>
-
-      <div id="wallet-info" class="wallet-info hidden">
-        <h3>Your Wallet</h3>
-        <div class="info-group">
-          <label>Address:</label>
-          <div class="input-with-btn">
-            <input type="text" id="wallet-address" readonly>
-            <button onclick="copyAddress()" class="btn-copy">Copy</button>
-          </div>
-        </div>
-        <div class="info-group">
-          <label>Private Key:</label>
-          <div class="input-with-btn">
-            <input type="password" id="wallet-key" readonly>
-            <button onclick="toggleKey()" class="btn-toggle">Show</button>
-            <button onclick="copyKey()" class="btn-copy">Copy</button>
-          </div>
-        </div>
-        <div class="balance-grid">
-          <div class="balance-card">
-            <h4>Balance</h4>
-            <p id="wallet-balance">0 SAYM</p>
-          </div>
-          <div class="balance-card">
-            <h4>Staked</h4>
-            <p id="wallet-staked">0 SAYM</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Send Form -->
-      <div class="form-section">
-        <h3>Send SAYM</h3>
-        <input type="text" id="send-to" placeholder="Recipient Address">
-        <input type="number" id="send-amount" placeholder="Amount">
-        <input type="password" id="send-key" placeholder="Your Private Key">
-        <button onclick="sendTransaction()" class="btn-primary">Send Transaction</button>
-        <div id="send-result" class="result"></div>
-      </div>
-
-      <!-- Stake Form -->
-      <div class="form-section">
-        <h3>Stake SAYM</h3>
-        <input type="number" id="stake-amount" placeholder="Amount to Stake">
-        <input type="password" id="stake-key" placeholder="Your Private Key">
-        <button onclick="stakeTokens()" class="btn-primary">Stake</button>
-
-        <h3 style="margin-top: 2rem;">Unstake</h3>
-        <input type="password" id="unstake-key" placeholder="Your Private Key">
-        <button onclick="unstakeTokens()" class="btn-secondary">Unstake</button>
-        <div id="stake-result" class="result"></div>
-      </div>
-    </div>
-
-    <!-- Contracts Page -->
-    <div id="contracts" class="page">
-      <h2>Smart Contracts</h2>
-
-      <!-- Deploy Contract -->
-      <div class="form-section">
-        <h3>Deploy Contract</h3>
-        <textarea id="contract-code" placeholder="JavaScript contract code" rows="10"></textarea>
-        <input type="password" id="deploy-key" placeholder="Your Private Key">
-        <button onclick="deployContract()" class="btn-primary">Deploy Contract</button>
-      </div>
-
-      <!-- Call Contract -->
-      <div class="form-section">
-        <h3>Call Contract</h3>
-        <input type="text" id="call-address" placeholder="Contract Address">
-        <input type="text" id="call-method" placeholder="Method Name">
-        <textarea id="call-args" placeholder='Arguments (JSON, e.g. {"amount": 100})' rows="3"></textarea>
-        <input type="password" id="call-key" placeholder="Your Private Key">
-        <button onclick="callContract()" class="btn-primary">Call Contract</button>
-        <div id="contract-result" class="result"></div>
-      </div>
-
-      <!-- Deployed Contracts -->
       <div class="section">
-        <h3>Deployed Contracts</h3>
-        <div id="contracts-list"></div>
+        <div class="section-header">
+          <h2>Block Explorer</h2>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Block</th>
+              <th>Hash</th>
+              <th>Validator</th>
+              <th>Txs</th>
+              <th>Gas Used</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody id="explorer-blocks"></tbody>
+        </table>
       </div>
     </div>
 
-    <!-- Faucet Page -->
-    <div id="faucet" class="page">
-      <h2>Testnet Faucet</h2>
-      <div class="faucet-notice" id="faucet-notice">
-        <p>⚠️ Faucet is only available on testnet</p>
-      </div>
-      <div class="form-section">
-        <input type="text" id="faucet-address" placeholder="Paste your wallet address">
-        <button onclick="claimFaucet()" class="btn-primary">Claim Tokens</button>
-        <div id="faucet-result" class="result"></div>
+    <div id="validators" class="page">
+      <div class="section">
+        <div class="section-header">
+          <h2>Active Validators</h2>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Address</th>
+              <th>Stake</th>
+              <th>Share</th>
+              <th>Missed Blocks</th>
+            </tr>
+          </thead>
+          <tbody id="validator-list"></tbody>
+        </table>
       </div>
     </div>
 
-    <!-- Network Page -->
+    <div id="contracts" class="page">
+      <div class="section">
+        <div class="section-header">
+          <h2>Smart Contracts</h2>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Address</th>
+              <th>Owner</th>
+              <th>Code Size</th>
+            </tr>
+          </thead>
+          <tbody id="contract-list"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div id="network" class="page">
-      <h2>Network Status</h2>
-
-      <!-- Network Stats -->
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-icon">🌐</div>
-          <div class="stat-content">
-            <h3 id="net-peers" class="stat-value">0</h3>
-            <p class="stat-label">Connected Peers</p>
-          </div>
+          <div class="stat-label">Connected Peers</div>
+          <div class="stat-value" id="net-peers">0</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">👥</div>
-          <div class="stat-content">
-            <h3 id="net-validators" class="stat-value">0</h3>
-            <p class="stat-label">Active Validators</p>
-          </div>
+          <div class="stat-label">Block Height</div>
+          <div class="stat-value" id="net-height">0</div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">📦</div>
-          <div class="stat-content">
-            <h3 id="net-height" class="stat-value">0</h3>
-            <p class="stat-label">Block Height</p>
-          </div>
+          <div class="stat-label">Avg Block Time</div>
+          <div class="stat-value" id="net-blocktime">0<span class="stat-unit">ms</span></div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon">⚡</div>
-          <div class="stat-content">
-            <h3 id="net-blocktime" class="stat-value">0</h3>
-            <p class="stat-label">Avg Block Time (ms)</p>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">💰</div>
-          <div class="stat-content">
-            <h3 id="net-stake" class="stat-value">0</h3>
-            <p class="stat-label">Total Stake</p>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">⏳</div>
-          <div class="stat-content">
-            <h3 id="net-mempool" class="stat-value">0</h3>
-            <p class="stat-label">Mempool Size</p>
-          </div>
+          <div class="stat-label">Mempool Size</div>
+          <div class="stat-value" id="net-mempool">0</div>
         </div>
       </div>
 
-      <!-- Node Information -->
       <div class="section">
-        <h3>This Node</h3>
-        <div class="info-box">
-          <p><strong>Node ID:</strong> <span id="node-id">Loading...</span></p>
-          <p><strong>Mode:</strong> <span id="node-mode">Loading...</span></p>
-          <p><strong>Uptime:</strong> <span id="node-uptime">Loading...</span></p>
-          <p><strong>Network:</strong> <span id="node-network">Loading...</span></p>
-          <p><strong>Chain ID:</strong> <span id="node-chainid">Loading...</span></p>
+        <div class="section-header">
+          <h2>Network Information</h2>
         </div>
+        <table>
+          <tbody>
+            <tr>
+              <td><strong>Node ID</strong></td>
+              <td class="mono" id="net-node-id">Loading...</td>
+            </tr>
+            <tr>
+              <td><strong>Mode</strong></td>
+              <td id="net-mode">Loading...</td>
+            </tr>
+            <tr>
+              <td><strong>Network</strong></td>
+              <td id="net-network">Loading...</td>
+            </tr>
+            <tr>
+              <td><strong>Chain ID</strong></td>
+              <td class="mono" id="net-chain">Loading...</td>
+            </tr>
+            <tr>
+              <td><strong>Uptime</strong></td>
+              <td id="net-uptime">Loading...</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <!-- Peer List -->
       <div class="section">
-        <h3>Connected Peers</h3>
+        <div class="section-header">
+          <h2>Connected Peers</h2>
+        </div>
         <div id="peer-list"></div>
       </div>
     </div>
-  </main>
+  </div>
 
-  <!-- Footer -->
-  <footer>
-    <div class="container">
-      <p>Sayman Blockchain Phase 5 - Production-Ready Network</p>
-      <p>Network: <span id="footer-network">...</span> | Chain ID: <span id="footer-chain">...</span></p>
-    </div>
-  </footer>
-
-  <script src="crypto-client.js"></script>
   <script src="app.js"></script>
 </body>
-
 </html>
