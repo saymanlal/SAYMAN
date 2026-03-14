@@ -27,13 +27,25 @@ class FaucetWallet {
     this.address = pubKeyHash.substring(0, 40);
     
     console.log(`🚰 Faucet Address: ${this.address}`);
+    console.log(`🔑 Public Key: ${this.publicKey.substring(0, 20)}...`);
   }
 
   async signTransaction(txData) {
     const keyPair = ec.keyFromPrivate(this.privateKey);
-    const dataString = JSON.stringify(txData);
+    
+    const signData = {
+      type: txData.type,
+      data: txData.data,
+      timestamp: txData.timestamp,
+      gasLimit: txData.gasLimit,
+      gasPrice: txData.gasPrice,
+      nonce: txData.nonce
+    };
+    
+    const dataString = JSON.stringify(signData);
     const hash = crypto.createHash('sha256').update(dataString).digest('hex');
     const signature = keyPair.sign(hash);
+    
     return signature.toDER('hex');
   }
 }
@@ -41,16 +53,52 @@ class FaucetWallet {
 const faucetWallet = new FaucetWallet();
 const cooldowns = new Map();
 
+// Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', faucet: faucetWallet.address });
+  res.json({ 
+    status: 'ok', 
+    faucet: faucetWallet.address,
+    publicKey: faucetWallet.publicKey
+  });
 });
 
+// Info endpoint - ADDED
+app.get('/info', async (req, res) => {
+  try {
+    // Get faucet balance from blockchain
+    const balanceRes = await fetch(`${API_BASE}/address/${faucetWallet.address}`);
+    let balance = 0;
+    
+    if (balanceRes.ok) {
+      const data = await balanceRes.json();
+      balance = data.balance || 0;
+    }
+    
+    res.json({
+      address: faucetWallet.address,
+      publicKey: faucetWallet.publicKey,
+      balance: balance,
+      amount: FAUCET_AMOUNT,
+      cooldown: 600000,
+      cooldownMinutes: 10,
+      apiBase: API_BASE
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: 'Failed to fetch faucet info',
+      address: faucetWallet.address,
+      amount: FAUCET_AMOUNT
+    });
+  }
+});
+
+// Faucet endpoint
 app.post('/faucet', async (req, res) => {
   try {
     const { address } = req.body;
     
     if (!address || address.length !== 40) {
-      return res.status(400).json({ error: 'Invalid address' });
+      return res.status(400).json({ error: 'Invalid address format' });
     }
     
     const now = Date.now();
@@ -64,10 +112,25 @@ app.post('/faucet', async (req, res) => {
       });
     }
     
+    console.log(`🚰 Faucet request for: ${address}`);
+    
+    // Get faucet balance and nonce
     const balanceRes = await fetch(`${API_BASE}/address/${faucetWallet.address}`);
+    if (!balanceRes.ok) {
+      console.error('Failed to get faucet balance:', balanceRes.status);
+      return res.status(500).json({ error: 'Failed to connect to blockchain' });
+    }
+    
     const balanceData = await balanceRes.json();
+    console.log(`💰 Faucet balance: ${balanceData.balance} SAYM, nonce: ${balanceData.nonce}`);
+    
+    if (balanceData.balance < FAUCET_AMOUNT) {
+      return res.status(500).json({ error: 'Faucet is empty, please try again later' });
+    }
+    
     const nonce = balanceData.nonce || 0;
     
+    // Create transaction
     const txData = {
       type: 'TRANSFER',
       data: { 
@@ -81,6 +144,9 @@ app.post('/faucet', async (req, res) => {
       nonce: nonce
     };
     
+    console.log('📝 Transaction data:', JSON.stringify(txData, null, 2));
+    
+    // Sign transaction
     const signature = await faucetWallet.signTransaction(txData);
     
     const signedTx = {
@@ -89,6 +155,9 @@ app.post('/faucet', async (req, res) => {
       publicKey: faucetWallet.publicKey
     };
     
+    console.log('✍️  Signed transaction, broadcasting...');
+    
+    // Broadcast transaction
     const broadcastRes = await fetch(`${API_BASE}/broadcast`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -96,20 +165,25 @@ app.post('/faucet', async (req, res) => {
     });
     
     const result = await broadcastRes.json();
+    console.log('📡 Broadcast result:', result);
     
     if (result.success) {
       cooldowns.set(address, now);
+      console.log(`✅ Faucet sent ${FAUCET_AMOUNT} SAYM to ${address}`);
+      
       res.json({ 
         success: true, 
         amount: FAUCET_AMOUNT,
-        txId: result.txId
+        txId: result.txId,
+        message: `${FAUCET_AMOUNT} SAYM sent successfully`
       });
     } else {
+      console.error('❌ Broadcast failed:', result.error);
       res.status(400).json({ error: result.error || 'Transaction failed' });
     }
     
   } catch (error) {
-    console.error('Faucet error:', error);
+    console.error('❌ Faucet error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -118,4 +192,5 @@ app.listen(PORT, () => {
   console.log(`🚰 Faucet server running on port ${PORT}`);
   console.log(`📡 API: ${API_BASE}`);
   console.log(`💰 Amount: ${FAUCET_AMOUNT} SAYM`);
+  console.log(`🔑 Address: ${faucetWallet.address}`);
 });
