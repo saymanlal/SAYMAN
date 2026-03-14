@@ -1,193 +1,148 @@
-import { Level } from 'level';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
-import crypto from 'crypto';
 import Block from './block.js';
 import Transaction from './transaction.js';
 import StateEngine from './state.js';
-import PoS from './pos.js';
+import ProofOfStake from './pos.js';
 import ContractEngine from './contracts.js';
 import GasCalculator from './gas.js';
-import NonceManager from './nonce.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { Level } from 'level';
 
 class Blockchain {
   constructor(config) {
     this.config = config;
     this.chainId = config.chainId;
-    this.networkName = config.networkName || 'Sayman Network';
-    
-    const isProduction = process.env.NODE_ENV === 'production' || 
-                         process.env.RENDER === 'true';
-    
-    const dbPath = isProduction
-      ? '/tmp/sayman-data'
-      : path.join(process.cwd(), 'data');
-    
-    console.log(`📁 Database path: ${dbPath}`);
-    console.log(`🌍 Environment: ${isProduction ? 'production' : 'development'}`);
-    
-    this.db = new Level(dbPath, { valueEncoding: 'json' });
     this.chain = [];
     this.mempool = [];
-    
     this.state = new StateEngine();
-    this.pos = new PoS(config);
-    this.contracts = new ContractEngine();
-    this.gasCalculator = new GasCalculator(config);
-    this.nonceManager = new NonceManager();
+    this.pos = new ProofOfStake(this.state, config);
+    this.gas = new GasCalculator(config);
+    this.contracts = new ContractEngine(this.state, this.gas);
+    this.db = new Level(`./data/${config.chainId}_${config.p2pPort}`, { valueEncoding: 'json' });
+    this.isProducing = false;
     
-    this.addressLastTx = new Map();
-    this.txRateLimit = 10;
-    this.rateLimitWindow = 60000;
+    // Anti-spam
+    this.mempoolLimit = 1000;
+    this.addressTxCount = new Map(); // address -> tx count in last minute
+    this.lastCleanup = Date.now();
   }
 
   async initialize() {
-    console.log('🔄 Initializing blockchain...');
-    
     try {
-      const isProduction = process.env.NODE_ENV === 'production' || 
-                           process.env.RENDER === 'true';
+      const savedChain = await this.db.get('chain');
       
-      const dataDir = isProduction
-        ? '/tmp/sayman-data'
-        : path.join(process.cwd(), 'data');
-      
-      console.log(`📁 Using database directory: ${dataDir}`);
-      
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-        console.log(`✅ Created directory: ${dataDir}`);
-      }
-
-      if (!this.db || this.db.status !== 'open') {
-        try {
-          await this.db.open();
-          console.log('✅ Database opened');
-        } catch (error) {
-          if (error.code === 'LEVEL_DATABASE_NOT_OPEN') {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          } else {
-            throw error;
-          }
+      if (savedChain && savedChain.length > 0) {
+        console.log(`📦 Loading ${savedChain.length} blocks from storage...`);
+        
+        const genesisBlock = savedChain[0];
+        if (genesisBlock.chainId && genesisBlock.chainId !== this.chainId) {
+          throw new Error(`Chain ID mismatch! Expected ${this.chainId}, got ${genesisBlock.chainId}`);
         }
-      }
-
-      try {
-        const chainData = await this.db.get('blockchain');
-        console.log('📚 Loading existing blockchain...');
         
-        const parsedChain = JSON.parse(chainData);
-        
-        this.chain = [];
-        for (const blockData of parsedChain) {
+        for (const blockData of savedChain) {
           const block = await Block.fromJSON(blockData);
           this.chain.push(block);
         }
 
-        console.log(`✅ Loaded ${this.chain.length} blocks from database`);
-
-        console.log('🔄 Rebuilding state from blockchain...');
-        await this.rebuildStateFromChain();
-        console.log('✅ State rebuilt successfully');
-
-      } catch (error) {
-        if (error.code === 'LEVEL_NOT_FOUND' || error.notFound) {
-          console.log('🌱 Creating genesis block...');
-          const genesisBlock = await this.createGenesisBlock();
-          this.chain = [genesisBlock];
-          await this.saveChain();
-          console.log('✅ Genesis block created');
-        } else {
-          throw error;
-        }
+        console.log('🔄 Replaying state from genesis...');
+        this.replayState();
+        
+        console.log('✅ Blockchain loaded and state rebuilt');
+      } else {
+        console.log('🎬 Creating genesis block...');
+        this.createGenesisBlock();
+        await this.saveChain();
       }
 
-      console.log('✅ Blockchain initialization complete');
-      console.log(`📊 Current height: ${this.chain.length}`);
-
+      this.printStats();
     } catch (error) {
-      console.error('❌ Error initializing blockchain:', error);
-      throw error;
+      if (error.code === 'LEVEL_NOT_FOUND') {
+        console.log('🎬 Creating genesis block...');
+        this.createGenesisBlock();
+        await this.saveChain();
+        this.printStats();
+      } else {
+        throw error;
+      }
     }
   }
 
-  async createGenesisBlock() {
-    const genesisTransactions = [];
-
-    // Genesis allocations
-    Object.entries(this.config.genesisAllocations || {}).forEach(([address, amount]) => {
-      const tx = new Transaction({
-        type: 'GENESIS',
-        data: { to: address, amount },
-        timestamp: Date.now(),
-        gasLimit: 0,
-        gasPrice: 0,
-        nonce: 0
-      });
-      genesisTransactions.push(tx);
-      this.state.addBalance(address, amount);
+  createGenesisBlock() {
+    console.log('🌱 Creating genesis block...');
+    
+    const genesisConfig = this.config.genesis;
+    const allocations = genesisConfig.allocations || {};
+    
+    const transactions = [];
+    
+    // CRITICAL: Create deterministic faucet address (MUST match faucet/server.js)
+    const faucetSeed = 'sayman-faucet-seed-2024';
+    const faucetHash = crypto.createHash('sha256').update(faucetSeed).digest('hex');
+    const faucetKeyPair = ec.keyFromPrivate(faucetHash);
+    const faucetPubKey = faucetKeyPair.getPublic('hex');
+    const faucetAddress = crypto.createHash('sha256').update(faucetPubKey).digest('hex').substring(0, 40);
+    
+    console.log(`🚰 Genesis Faucet Address: ${faucetAddress}`);
+    
+    // Process all allocations with deterministic addresses
+    Object.entries(allocations).forEach(([key, amount]) => {
+      let address;
+      
+      if (key === 'faucet1') {
+        // Use deterministic faucet address
+        address = faucetAddress;
+        this.state.addBalance(address, amount);
+        console.log(`✓ Faucet allocated: ${address} (${amount} SAYM)`);
+      } else if (key === 'validator1') {
+        // Create genesis validator with stake
+        const validatorSeed = 'genesis-validator-' + this.chainId;
+        const validatorHash = crypto.createHash('sha256').update(validatorSeed).digest('hex');
+        const validatorKeyPair = ec.keyFromPrivate(validatorHash);
+        const validatorPubKey = validatorKeyPair.getPublic('hex');
+        address = crypto.createHash('sha256').update(validatorPubKey).digest('hex').substring(0, 40);
+        
+        // Give validator double the stake amount (half will be staked)
+        const stakeAmount = amount;
+        const totalAmount = amount * 2;
+        
+        this.state.addBalance(address, totalAmount);
+        this.state.stake(address, stakeAmount);
+        this.pos.addValidator(address, stakeAmount);
+        
+        console.log(`✓ Validator added: ${address.substring(0, 8)}... (Stake: ${stakeAmount})`);
+        console.log(`✓ Genesis validator created: ${address.substring(0, 8)}... with ${stakeAmount} SAYM stake`);
+      } else {
+        // Other genesis allocations (genesis1, genesis2, treasury, etc.)
+        const seed = `genesis-${key}-${this.chainId}`;
+        const hash = crypto.createHash('sha256').update(seed).digest('hex');
+        const keyPair = ec.keyFromPrivate(hash);
+        const pubKey = keyPair.getPublic('hex');
+        address = crypto.createHash('sha256').update(pubKey).digest('hex').substring(0, 40);
+        
+        this.state.addBalance(address, amount);
+        console.log(`✓ Genesis allocation: ${key} → ${address.substring(0, 8)}... (${amount} SAYM)`);
+      }
     });
-
-    // Genesis stakes - CREATE REAL VALIDATORS
-    Object.entries(this.config.genesisStakes || {}).forEach(([addressKey, amount]) => {
-      // Generate a real 40-char hex address for genesis validator
-      const validatorAddress = crypto
-        .createHash('sha256')
-        .update('genesis-validator-' + addressKey + '-' + this.chainId)
-        .digest('hex')
-        .substring(0, 40);
-      
-      // Give validator initial balance (2x stake for gas fees)
-      this.state.addBalance(validatorAddress, amount * 2);
-      
-      const tx = new Transaction({
-        type: 'STAKE',
-        data: { from: validatorAddress, amount },
-        timestamp: Date.now(),
-        gasLimit: 0,
-        gasPrice: 0,
-        nonce: 0
-      });
-      genesisTransactions.push(tx);
-      
-      // Actually stake and add as validator
-      this.state.stake(validatorAddress, amount);
-      this.pos.addValidator(validatorAddress, amount);
-      
-      console.log(`✓ Genesis validator created: ${validatorAddress.substring(0, 8)}... with ${amount} SAYM stake`);
-    });
-
+    
     const genesisBlock = new Block(
       0,
-      Date.now(),
-      genesisTransactions,
       '0',
-      'genesis',
-      this.chainId
+      transactions,
+      genesisConfig.timestamp,
+      'genesis-validator',
+      0
     );
-
+    
     genesisBlock.hash = genesisBlock.calculateHash();
-
+    
+    this.chain.push(genesisBlock);
+    this.saveBlock(genesisBlock);
+    
+    console.log('✅ Genesis block created');
+    
     return genesisBlock;
   }
 
-  async saveChain() {
-    try {
-      const chainData = JSON.stringify(this.chain.map(block => block.toJSON()));
-      await this.db.put('blockchain', chainData);
-    } catch (error) {
-      console.error('Error saving blockchain:', error);
-    }
-  }
-
-  async rebuildStateFromChain() {
-    this.state = new StateEngine();
-    this.pos = new PoS(this.config);
-    this.nonceManager = new NonceManager();
+  replayState() {
+    this.state.clear();
 
     for (const block of this.chain) {
       this.applyBlock(block);
@@ -196,189 +151,329 @@ class Blockchain {
 
   applyBlock(block) {
     for (const tx of block.transactions) {
-      this.applyTransaction(tx, block.validator);
+      this.applyTransaction(tx, block.index);
     }
   }
 
-  applyTransaction(tx, validator = null) {
-    switch (tx.type) {
-      case 'GENESIS':
-        this.state.addBalance(tx.data.to, tx.data.amount);
-        break;
+  applyTransaction(tx, blockIndex) {
+    try {
+      // Increment nonce for user transactions
+      if (tx.type !== 'GENESIS' && tx.type !== 'REWARD' && tx.type !== 'REWARD_FEE' && tx.type !== 'SLASH') {
+        this.state.incrementNonce(tx.data.from);
+      }
 
+      switch (tx.type) {
+        case 'GENESIS':
+          this.state.addBalance(tx.data.to, tx.data.amount);
+          break;
+
+        case 'TRANSFER':
+          // Deduct gas cost
+          const transferGasCost = tx.gasUsed * tx.gasPrice;
+          this.state.subtractBalance(tx.data.from, tx.data.amount + transferGasCost);
+          this.state.addBalance(tx.data.to, tx.data.amount);
+          break;
+
+        case 'STAKE':
+          const stakeGasCost = tx.gasUsed * tx.gasPrice;
+          this.state.subtractBalance(tx.data.from, tx.data.amount + stakeGasCost);
+          this.state.addStake(tx.data.from, tx.data.amount);
+          this.state.resetMissedBlocks(tx.data.from);
+          break;
+
+        case 'UNSTAKE':
+          const unstakeGasCost = tx.gasUsed * tx.gasPrice;
+          this.state.subtractBalance(tx.data.from, unstakeGasCost);
+          const stakeAmount = this.state.getStake(tx.data.from);
+          const unlockBlock = blockIndex + this.config.unstakeDelay;
+          this.state.setStake(tx.data.from, 0);
+          this.state.initiateUnstake(tx.data.from, unlockBlock);
+          break;
+
+        case 'REWARD':
+          this.state.addBalance(tx.data.to, tx.data.amount);
+          break;
+
+        case 'REWARD_FEE':
+          this.state.addBalance(tx.data.to, tx.data.amount);
+          break;
+
+        case 'CONTRACT_DEPLOY':
+          const deployGasCost = tx.gasUsed * tx.gasPrice;
+          this.state.subtractBalance(tx.data.from, deployGasCost);
+          // Contract already deployed during execution
+          break;
+
+        case 'CONTRACT_CALL':
+          const callGasCost = tx.gasUsed * tx.gasPrice;
+          this.state.subtractBalance(tx.data.from, callGasCost);
+          // Contract already executed
+          break;
+
+        case 'SLASH':
+          this.state.subtractStake(tx.data.validator, tx.data.amount);
+          this.state.resetMissedBlocks(tx.data.validator);
+          break;
+      }
+    } catch (error) {
+      console.error(`Error applying transaction ${tx.id}: ${error.message}`);
+    }
+  }
+
+  addTransaction(tx, publicKey) {
+    // Anti-spam: Check mempool size
+    if (this.mempool.length >= this.mempoolLimit) {
+      throw new Error('Mempool full. Try again later.');
+    }
+
+    // Anti-spam: Rate limit per address
+    this.cleanupRateLimit();
+    const addressCount = this.addressTxCount.get(tx.data.from) || 0;
+    if (addressCount >= 10) { // Max 10 tx per minute per address
+      throw new Error('Rate limit exceeded. Please wait.');
+    }
+
+    // Store public key
+    if (tx.data.from) {
+      this.state.setPublicKey(tx.data.from, publicKey);
+    }
+
+    // Validate signature
+    if (!tx.isValid(this.state.publicKeys)) {
+      throw new Error('Invalid transaction signature');
+    }
+
+    // Validate nonce
+    const expectedNonce = this.state.getNonce(tx.data.from);
+    if (tx.nonce !== expectedNonce) {
+      throw new Error(`Invalid nonce. Expected: ${expectedNonce}, Got: ${tx.nonce}`);
+    }
+
+    // Validate gas parameters
+    this.gas.validateGasParams(tx);
+
+    // Calculate minimum gas
+    const minGas = this.gas.calculateTransactionGas(tx);
+    if (tx.gasLimit < minGas) {
+      throw new Error(`Gas limit too low. Minimum: ${minGas}`);
+    }
+
+    // Check balance covers gas cost
+    const maxGasCost = tx.gasLimit * tx.gasPrice;
+    
+    switch (tx.type) {
       case 'TRANSFER':
-        this.state.transfer(tx.data.from, tx.data.to, tx.data.amount);
-        this.nonceManager.incrementNonce(tx.data.from);
-        if (tx.gasUsed && validator) {
-          this.state.addBalance(validator, tx.gasUsed * tx.gasPrice);
+        if (this.state.getBalance(tx.data.from) < (tx.data.amount + maxGasCost)) {
+          throw new Error('Insufficient balance for transfer + gas');
         }
         break;
 
       case 'STAKE':
-        this.state.stake(tx.data.from, tx.data.amount);
-        this.pos.addValidator(tx.data.from, tx.data.amount);
-        this.nonceManager.incrementNonce(tx.data.from);
-        if (tx.gasUsed && validator) {
-          this.state.addBalance(validator, tx.gasUsed * tx.gasPrice);
+        if (this.state.getBalance(tx.data.from) < (tx.data.amount + maxGasCost)) {
+          throw new Error('Insufficient balance for staking + gas');
+        }
+        if (tx.data.amount < this.config.minStake) {
+          throw new Error(`Minimum stake is ${this.config.minStake} SAYM`);
         }
         break;
 
       case 'UNSTAKE':
-        this.state.unstake(tx.data.from);
-        this.pos.removeValidator(tx.data.from);
-        this.nonceManager.incrementNonce(tx.data.from);
-        if (tx.gasUsed && validator) {
-          this.state.addBalance(validator, tx.gasUsed * tx.gasPrice);
+        if (this.state.getBalance(tx.data.from) < maxGasCost) {
+          throw new Error('Insufficient balance for gas');
         }
-        break;
-
-      case 'REWARD':
-        this.state.addBalance(tx.data.to, tx.data.amount);
-        break;
-
-      case 'REWARD_FEE':
-        this.state.addBalance(tx.data.to, tx.data.amount);
+        if (this.state.getStake(tx.data.from) === 0) {
+          throw new Error('No stake to unstake');
+        }
+        if (this.state.isUnstaking(tx.data.from)) {
+          throw new Error('Already unstaking');
+        }
         break;
 
       case 'CONTRACT_DEPLOY':
-        this.contracts.deploy(tx.data.contractAddress, tx.data.code, tx.data.from);
-        this.nonceManager.incrementNonce(tx.data.from);
-        if (tx.gasUsed && validator) {
-          this.state.addBalance(validator, tx.gasUsed * tx.gasPrice);
-        }
-        break;
-
       case 'CONTRACT_CALL':
-        this.nonceManager.incrementNonce(tx.data.from);
-        if (tx.gasUsed && validator) {
-          this.state.addBalance(validator, tx.gasUsed * tx.gasPrice);
+        if (this.state.getBalance(tx.data.from) < maxGasCost) {
+          throw new Error('Insufficient balance for gas');
         }
         break;
+    }
 
-      case 'SLASH':
-        this.state.slash(tx.data.address, tx.data.amount);
-        this.pos.slashValidator(tx.data.address, tx.data.amount);
-        break;
+    // Add to mempool
+    this.mempool.push(tx);
+
+    // Update rate limit counter
+    this.addressTxCount.set(tx.data.from, addressCount + 1);
+  }
+
+  cleanupRateLimit() {
+    const now = Date.now();
+    if (now - this.lastCleanup > 60000) { // Every minute
+      this.addressTxCount.clear();
+      this.lastCleanup = now;
     }
   }
 
   async createBlock() {
-    const lastBlock = this.getLastBlock();
-    const validator = this.pos.selectValidator(lastBlock.validator);
-
-    if (!validator) {
+    if (this.isProducing) {
       return null;
     }
 
-    const pendingTransactions = this.mempool.splice(0, 100);
-    const validTransactions = [];
-    let totalGasUsed = 0;
+    this.isProducing = true;
 
-    for (const tx of pendingTransactions) {
-      if (this.isValidTransaction(tx)) {
-        const gasUsed = this.gasCalculator.calculateGas(tx.type, tx.data);
-        
-        if (totalGasUsed + gasUsed <= this.config.gasLimits.maxGasPerBlock) {
-          tx.gasUsed = gasUsed;
-          validTransactions.push(tx);
-          totalGasUsed += gasUsed;
+    try {
+      const lastBlock = this.getLastBlock();
+      const validator = this.pos.selectValidator(lastBlock.hash);
+
+      if (!validator) {
+        this.isProducing = false;
+        return null;
+      }
+
+      const transactions = [];
+      let blockGasUsed = 0;
+
+      // Process mempool transactions
+      for (const tx of this.mempool) {
+        try {
+          // Execute transaction to calculate actual gas
+          const gasTracker = this.gas.trackExecution();
           
-          this.applyTransaction(tx, validator);
-          
-          if (gasUsed > 0) {
-            const feeReward = new Transaction({
-              type: 'REWARD_FEE',
-              data: { to: validator, amount: gasUsed * tx.gasPrice },
-              timestamp: Date.now(),
-              gasLimit: 0,
-              gasPrice: 0,
-              nonce: 0
-            });
-            validTransactions.push(feeReward);
+          if (tx.type === 'CONTRACT_DEPLOY') {
+            this.contracts.deploy(tx.data.from, tx.data.code, tx.timestamp, gasTracker);
+          } else if (tx.type === 'CONTRACT_CALL') {
+            this.contracts.call(
+              tx.data.from,
+              tx.data.contractAddress,
+              tx.data.method,
+              tx.data.args,
+              gasTracker,
+              tx.gasLimit
+            );
+          } else {
+            // Simple transactions
+            const minGas = this.gas.calculateTransactionGas(tx);
+            gasTracker.gasUsed = minGas;
           }
+
+          // Check if exceeds block gas limit
+          if (blockGasUsed + gasTracker.gasUsed > this.gas.limits.maxGasPerBlock) {
+            continue; // Skip this tx, try next
+          }
+
+          tx.gasUsed = gasTracker.gasUsed;
+          transactions.push(tx);
+          blockGasUsed += gasTracker.gasUsed;
+
+          // Create gas fee reward for validator
+          const gasFee = tx.gasUsed * tx.gasPrice;
+          if (gasFee > 0) {
+            const feeReward = Transaction.createRewardFee(validator, gasFee);
+            transactions.push(feeReward);
+          }
+
+        } catch (error) {
+          console.log(`⚠ Transaction ${tx.id.substring(0, 8)} failed: ${error.message}`);
+          // Skip failed transaction
         }
       }
+
+      // Clear processed transactions from mempool
+      this.mempool = [];
+
+      // Add block reward
+      const rewardTx = Transaction.createReward(validator, this.config.blockReward);
+      transactions.push(rewardTx);
+
+      // Check for slashing
+      const slashEvents = this.pos.checkSlashing(this.config);
+      for (const slash of slashEvents) {
+        const slashTx = Transaction.createSlash(
+          slash.validator,
+          slash.amount,
+          slash.reason
+        );
+        transactions.push(slashTx);
+      }
+
+      // Create block
+      const block = new Block(
+        this.chain.length,
+        transactions,
+        lastBlock.hash,
+        validator
+      );
+      
+      block.chainId = this.chainId;
+      block.gasUsed = blockGasUsed;
+
+      // Apply block to state
+      this.applyBlock(block);
+
+      // Add to chain
+      this.chain.push(block);
+
+      // Reset missed blocks for validator
+      this.state.resetMissedBlocks(validator);
+
+      // Save
+      await this.saveChain();
+
+      console.log(`✅ Block #${block.index} | Validator: ${validator.substring(0, 8)}... | Txs: ${block.transactions.length} | Gas: ${blockGasUsed} | Reward: ${this.config.blockReward} SAYM`);
+
+      this.isProducing = false;
+      return block;
+
+    } catch (error) {
+      console.error('Error creating block:', error);
+      this.isProducing = false;
+      return null;
+    }
+  }
+
+  async replaceChain(newChain) {
+    if (newChain.length <= this.chain.length) {
+      return false;
     }
 
-    const rewardTx = new Transaction({
-      type: 'REWARD',
-      data: { to: validator, amount: this.config.blockReward },
-      timestamp: Date.now(),
-      gasLimit: 0,
-      gasPrice: 0,
-      nonce: 0
-    });
-    validTransactions.push(rewardTx);
-    this.state.addBalance(validator, this.config.blockReward);
+    if (newChain[0].chainId && newChain[0].chainId !== this.chainId) {
+      console.log(`❌ Rejecting chain from different network (${newChain[0].chainId})`);
+      return false;
+    }
 
-    const newBlock = new Block(
-      this.chain.length,
-      Date.now(),
-      validTransactions,
-      lastBlock.hash,
-      validator,
-      this.chainId
-    );
+    if (!this.isValidChain(newChain)) {
+      console.log('✗ Received invalid chain');
+      return false;
+    }
 
-    newBlock.hash = newBlock.calculateHash();
-    newBlock.gasUsed = totalGasUsed;
-
-    this.chain.push(newBlock);
+    console.log(`📥 Replacing chain (${this.chain.length} -> ${newChain.length} blocks)`);
+    
+    this.chain = newChain;
+    this.replayState();
     await this.saveChain();
 
-    console.log(`⛏️  Block #${newBlock.index} mined by ${validator.substring(0, 8)}... (${validTransactions.length} txs, ${totalGasUsed} gas)`);
-
-    return newBlock;
+    console.log('✓ Chain replaced and state rebuilt');
+    return true;
   }
 
-  isValidTransaction(tx) {
-    try {
-      if (!tx.isValid(this.state.publicKeys)) {
+  isValidChain(chain) {
+    if (chain.length === 0) return false;
+
+    for (let i = 1; i < chain.length; i++) {
+      const currentBlock = chain[i];
+      const previousBlock = chain[i - 1];
+
+      if (currentBlock.previousHash !== previousBlock.hash) {
         return false;
       }
 
-      const nonce = this.nonceManager.getNonce(tx.data.from);
-      if (tx.nonce !== nonce) {
-        console.log(`Invalid nonce for ${tx.data.from}: expected ${nonce}, got ${tx.nonce}`);
+      if (currentBlock.hash !== currentBlock.calculateHash()) {
         return false;
       }
 
-      if (!this.checkRateLimit(tx.data.from)) {
+      // Validate gas limits
+      if (currentBlock.gasUsed > this.gas.limits.maxGasPerBlock) {
         return false;
       }
-
-      if (tx.type === 'TRANSFER') {
-        const totalCost = tx.data.amount + (tx.gasLimit * tx.gasPrice);
-        if (this.state.getBalance(tx.data.from) < totalCost) {
-          return false;
-        }
-      }
-
-      if (tx.type === 'STAKE') {
-        const totalCost = tx.data.amount + (tx.gasLimit * tx.gasPrice);
-        if (this.state.getBalance(tx.data.from) < totalCost) {
-          return false;
-        }
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Transaction validation error:', error);
-      return false;
     }
-  }
-
-  checkRateLimit(address) {
-    const now = Date.now();
-    const lastTxTimes = this.addressLastTx.get(address) || [];
-    const recentTxs = lastTxTimes.filter(time => now - time < this.rateLimitWindow);
-
-    if (recentTxs.length >= this.txRateLimit) {
-      return false;
-    }
-
-    recentTxs.push(now);
-    this.addressLastTx.set(address, recentTxs);
 
     return true;
   }
@@ -387,81 +482,46 @@ class Blockchain {
     return this.chain[this.chain.length - 1];
   }
 
-  isValidChain(chain) {
-    if (JSON.stringify(chain[0]) !== JSON.stringify(this.chain[0])) {
-      return false;
-    }
-
-    for (let i = 1; i < chain.length; i++) {
-      const block = chain[i];
-      const prevBlock = chain[i - 1];
-
-      if (block.previousHash !== prevBlock.hash) {
-        return false;
-      }
-
-      if (block.hash !== block.calculateHash()) {
-        return false;
-      }
-
-      if (block.chainId !== this.chainId) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  async replaceChain(newChain) {
-    if (newChain.length <= this.chain.length) {
-      return false;
-    }
-
-    if (!this.isValidChain(newChain)) {
-      return false;
-    }
-
-    this.chain = newChain;
-    await this.rebuildStateFromChain();
-    await this.saveChain();
-
-    return true;
+  async saveChain() {
+    const chainData = this.chain.map(block => block.toJSON());
+    await this.db.put('chain', chainData);
   }
 
   getStats() {
-    const validatorCount = this.pos && this.pos.validators ? this.pos.validators.size : 0;
-    const contractCount = this.contracts && this.contracts.contracts instanceof Map 
-      ? this.contracts.contracts.size 
-      : 0;
+    const validators = this.state.getValidators();
+    const totalRewards = validators.reduce((sum, v) => sum + (v.totalRewards || 0), 0);
     
-    let totalStake = 0;
-    if (this.pos && this.pos.validators) {
-      totalStake = Array.from(this.pos.validators.values()).reduce((sum, v) => sum + v.stake, 0);
-    }
-
     return {
-      network: this.networkName,
+      network: this.config.networkName,
       chainId: this.chainId,
       blocks: this.chain.length,
+      validators: validators.length,
+      totalStake: this.state.getTotalStake(),
       mempool: this.mempool.length,
-      validators: validatorCount,
-      totalStake: totalStake,
-      contracts: contractCount
+      contracts: this.state.getAllContracts().length,
+      blockReward: this.config.blockReward,
+      blockTime: this.config.blockTime,
+      totalRewards: totalRewards,
+      gasLimits: this.gas.limits,
+      gasCosts: this.gas.gasCosts
     };
   }
 
-  static reconstructTransaction(txData) {
-    return new Transaction(txData);
+  printStats() {
+    const stats = this.getStats();
+    console.log('\n📊 Blockchain Stats:');
+    console.log(`   Network: ${stats.network}`);
+    console.log(`   Chain ID: ${stats.chainId}`);
+    console.log(`   Blocks: ${stats.blocks}`);
+    console.log(`   Validators: ${stats.validators}`);
+    console.log(`   Total Stake: ${stats.totalStake} SAYM`);
+    console.log(`   Mempool: ${stats.mempool}`);
+    console.log(`   Contracts: ${stats.contracts}`);
+    console.log(`   Min Gas Price: ${this.gas.limits.minGasPrice}\n`);
   }
 
   async close() {
-    try {
-      await this.saveChain();
-      await this.db.close();
-      console.log('✅ Database closed');
-    } catch (error) {
-      console.error('Error closing database:', error);
-    }
+    await this.db.close();
   }
 }
 
