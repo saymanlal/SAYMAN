@@ -66,23 +66,79 @@ class Blockchain {
   }
 
   createGenesisBlock() {
+    console.log('🌱 Creating genesis block...');
+    
+    const genesisConfig = this.config.genesis;
+    const allocations = genesisConfig.allocations || {};
+    
     const transactions = [];
-
-    for (const [address, amount] of Object.entries(this.config.genesisAllocations)) {
-      const tx = new Transaction('GENESIS', { to: address, amount });
-      transactions.push(tx);
-    }
-
-    for (const [address, amount] of Object.entries(this.config.genesisStakes)) {
-      const tx = new Transaction('STAKE', { from: address, amount });
-      transactions.push(tx);
-    }
-
-    const genesisBlock = new Block(0, transactions, '0', 'genesis');
-    genesisBlock.chainId = this.chainId;
+    
+    // CRITICAL: Create deterministic faucet address (MUST match faucet/server.js)
+    const faucetSeed = 'sayman-faucet-seed-2024';
+    const faucetHash = crypto.createHash('sha256').update(faucetSeed).digest('hex');
+    const faucetKeyPair = ec.keyFromPrivate(faucetHash);
+    const faucetPubKey = faucetKeyPair.getPublic('hex');
+    const faucetAddress = crypto.createHash('sha256').update(faucetPubKey).digest('hex').substring(0, 40);
+    
+    console.log(`🚰 Genesis Faucet Address: ${faucetAddress}`);
+    
+    // Process all allocations with deterministic addresses
+    Object.entries(allocations).forEach(([key, amount]) => {
+      let address;
+      
+      if (key === 'faucet1') {
+        // Use deterministic faucet address
+        address = faucetAddress;
+        this.state.addBalance(address, amount);
+        console.log(`✓ Faucet allocated: ${address} (${amount} SAYM)`);
+      } else if (key === 'validator1') {
+        // Create genesis validator with stake
+        const validatorSeed = 'genesis-validator-' + this.chainId;
+        const validatorHash = crypto.createHash('sha256').update(validatorSeed).digest('hex');
+        const validatorKeyPair = ec.keyFromPrivate(validatorHash);
+        const validatorPubKey = validatorKeyPair.getPublic('hex');
+        address = crypto.createHash('sha256').update(validatorPubKey).digest('hex').substring(0, 40);
+        
+        // Give validator double the stake amount (half will be staked)
+        const stakeAmount = amount;
+        const totalAmount = amount * 2;
+        
+        this.state.addBalance(address, totalAmount);
+        this.state.stake(address, stakeAmount);
+        this.pos.addValidator(address, stakeAmount);
+        
+        console.log(`✓ Validator added: ${address.substring(0, 8)}... (Stake: ${stakeAmount})`);
+        console.log(`✓ Genesis validator created: ${address.substring(0, 8)}... with ${stakeAmount} SAYM stake`);
+      } else {
+        // Other genesis allocations (genesis1, genesis2, treasury, etc.)
+        const seed = `genesis-${key}-${this.chainId}`;
+        const hash = crypto.createHash('sha256').update(seed).digest('hex');
+        const keyPair = ec.keyFromPrivate(hash);
+        const pubKey = keyPair.getPublic('hex');
+        address = crypto.createHash('sha256').update(pubKey).digest('hex').substring(0, 40);
+        
+        this.state.addBalance(address, amount);
+        console.log(`✓ Genesis allocation: ${key} → ${address.substring(0, 8)}... (${amount} SAYM)`);
+      }
+    });
+    
+    const genesisBlock = new Block(
+      0,
+      '0',
+      transactions,
+      genesisConfig.timestamp,
+      'genesis-validator',
+      0
+    );
+    
+    genesisBlock.hash = genesisBlock.calculateHash();
+    
     this.chain.push(genesisBlock);
-
-    this.applyBlock(genesisBlock);
+    this.saveBlock(genesisBlock);
+    
+    console.log('✅ Genesis block created');
+    
+    return genesisBlock;
   }
 
   replayState() {

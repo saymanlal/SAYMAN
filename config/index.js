@@ -1,46 +1,41 @@
-import testnet from './testnet.js';
-import mainnet from './mainnet.js';
-import publicTestnet from './public-testnet.js';
+import testnetConfig from './testnet.js';
+import publicTestnetConfig from './public-testnet.js';
+import mainnetConfig from './mainnet.js';
 
-// Parse command line arguments
-const args = process.argv.slice(2);
-let networkArg = 'testnet';
-
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--network' && args[i + 1]) {
-    networkArg = args[i + 1];
+export function loadConfig(network = 'testnet') {
+  console.log(`\n📡 Loading configuration for: ${network}`);
+  
+  let config;
+  
+  switch (network.toLowerCase()) {
+    case 'testnet':
+      config = testnetConfig;
+      break;
+    case 'public-testnet':
+      config = publicTestnetConfig;
+      break;
+    case 'mainnet':
+      config = mainnetConfig;
+      break;
+    default:
+      console.error(`❌ Invalid network: ${network}`);
+      console.log('Available networks: testnet, public-testnet, mainnet');
+      process.exit(1);
   }
+  
+  // Validate configuration
+  if (!config.chainId) {
+    throw new Error('Chain ID is required in config');
+  }
+  
+  if (!config.genesis || !config.genesis.allocations) {
+    throw new Error('Genesis allocations are required in config');
+  }
+  
+  console.log(`🔗 Chain ID: ${config.chainId}`);
+  console.log(`🚰 Faucet: ${config.faucetEnabled ? 'ENABLED' : 'DISABLED'}`);
+  console.log(`👥 Max Peers: ${config.maxPeers}`);
+  console.log('');
+  
+  return config;
 }
-
-// Use environment variable or command line arg
-const network = process.env.NODE_ENV || networkArg;
-
-const configs = {
-  testnet,
-  mainnet,
-  'public-testnet': publicTestnet
-};
-
-const config = configs[network];
-
-if (!config) {
-  console.error(`❌ Invalid network: ${network}`);
-  console.log('Available networks: testnet, mainnet, public-testnet');
-  process.exit(1);
-}
-
-// Validate configuration
-if (!config.chainId) {
-  throw new Error('Chain ID is required');
-}
-
-if (!config.genesisAllocations) {
-  throw new Error('Genesis allocations are required');
-}
-
-console.log(`\n📡 Loading configuration for: ${config.networkName}`);
-console.log(`🔗 Chain ID: ${config.chainId}`);
-console.log(`🚰 Faucet: ${config.faucetEnabled ? 'ENABLED' : 'DISABLED'}`);
-console.log(`👥 Max Peers: ${config.maxPeers || 'unlimited'}\n`);
-
-export default config;
