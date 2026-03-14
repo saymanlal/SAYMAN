@@ -71,28 +71,38 @@ async function startServer() {
     setupRoutes(app, blockchain, p2pServer);
 
     const PORT = config.apiPort;
+    
     server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 API server running on port ${PORT}`);
-      console.log(`📡 Node ID: ${p2pServer.nodeId}`);
-      console.log(`🔗 Mode: ${mode.toUpperCase()}`);
     });
 
-    // CRITICAL FIX: Pass HTTP server to P2P
-    if (mode === 'validator' || mode === 'full') {
-      p2pServer.listen(server);
-    }
+    // Wait for server to be ready before starting P2P
+    server.on('listening', () => {
+      console.log(`📡 Node ID: ${p2pServer.nodeId}`);
+      console.log(`🔗 Mode: ${mode.toUpperCase()}`);
+      
+      // Start P2P after HTTP server is listening
+      if (mode === 'validator' || mode === 'full') {
+        try {
+          p2pServer.listen(server);
+        } catch (error) {
+          console.error('❌ P2P server failed to start:', error.message);
+          console.log('⚠️  Continuing in API-only mode');
+        }
+      }
 
-    if (config.bootstrapPeers.length > 0) {
-      console.log('\n🔗 Connecting to bootstrap peers...');
-      config.bootstrapPeers.forEach(peer => {
-        p2pServer.connectToPeer(peer);
-      });
-    }
+      if (config.bootstrapPeers.length > 0) {
+        console.log('\n🔗 Connecting to bootstrap peers...');
+        config.bootstrapPeers.forEach(peer => {
+          p2pServer.connectToPeer(peer);
+        });
+      }
 
-    if (mode === 'validator') {
-      console.log('\n⛏️  Starting mining...');
-      startMining();
-    }
+      if (mode === 'validator') {
+        console.log('\n⛏️  Starting mining...');
+        startMining();
+      }
+    });
 
     process.on('SIGTERM', gracefulShutdown);
     process.on('SIGINT', gracefulShutdown);
@@ -129,13 +139,26 @@ function gracefulShutdown() {
     p2pServer.close();
   }
   
-  if (server) {
-    server.close(() => {
-      console.log('✅ Server closed');
-      process.exit(0);
+  if (blockchain) {
+    blockchain.close().then(() => {
+      if (server) {
+        server.close(() => {
+          console.log('✅ Server closed');
+          process.exit(0);
+        });
+      } else {
+        process.exit(0);
+      }
     });
   } else {
-    process.exit(0);
+    if (server) {
+      server.close(() => {
+        console.log('✅ Server closed');
+        process.exit(0);
+      });
+    } else {
+      process.exit(0);
+    }
   }
 }
 
