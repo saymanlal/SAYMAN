@@ -1,6 +1,9 @@
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import Wallet from '../wallet/wallet.js';
+import elliptic from 'elliptic';
+
+const EC = elliptic.ec;
+const ec = new EC('secp256k1');
 
 class Transaction {
   constructor(type, data) {
@@ -54,8 +57,22 @@ class Transaction {
       return false;
     }
 
-    const hash = this.calculateHash();
-    return Wallet.verifySignature(publicKey, this.signature, hash);
+    // Verify signature using elliptic directly
+    try {
+      const key = ec.keyFromPublic(publicKey, 'hex');
+      const msgHash = this.calculateHash();
+      
+      const isValid = key.verify(msgHash, this.signature);
+      
+      if (!isValid) {
+        console.error(`❌ Signature verification failed for ${this.data.from}`);
+      }
+      
+      return isValid;
+    } catch (error) {
+      console.error('Signature verification error:', error.message);
+      return false;
+    }
   }
 
   toJSON() {
