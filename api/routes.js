@@ -213,9 +213,14 @@ export function setupRoutes(app, blockchain, p2pServer, config) {
         });
       }
 
+      // CRITICAL: Register public key BEFORE validation
       blockchain.state.setPublicKey(data.from, publicKey);
 
+      // Now validate signature
       if (!tx.isValid(blockchain.state.publicKeys)) {
+        console.error(`❌ Invalid signature for tx from ${data.from}`);
+        console.error(`   Public key: ${publicKey.substring(0, 20)}...`);
+        console.error(`   Signature: ${signature.substring(0, 20)}...`);
         return res.status(400).json({
           error: 'Invalid signature'
         });
