@@ -18,9 +18,11 @@ class ProofOfStake {
   }
 
   selectValidator(lastBlockHash) {
+    // Get validators from state (not from this.validators)
     const validators = this.state.getValidators();
     
-    if (validators.length === 0) {
+    if (!validators || validators.length === 0) {
+      console.log('⚠️  No validators available');
       return null;
     }
 
@@ -31,6 +33,7 @@ class ProofOfStake {
     const totalStake = this.state.getTotalStake();
     
     if (totalStake === 0) {
+      console.log('⚠️  Total stake is 0');
       return null;
     }
 
@@ -56,6 +59,10 @@ class ProofOfStake {
     const slashTransactions = [];
     const validators = this.state.getValidators();
 
+    if (!validators || validators.length === 0) {
+      return slashTransactions;
+    }
+
     for (const validator of validators) {
       if (validator.missedBlocks >= config.maxMissedBlocks) {
         const slashAmount = validator.stake * config.slashPercentage;
@@ -72,19 +79,11 @@ class ProofOfStake {
   }
 
   incrementMissedBlocks(validatorAddress) {
-    const validators = this.state.getValidators();
-    const validator = validators.find(v => v.address === validatorAddress);
-    if (validator) {
-      validator.missedBlocks = (validator.missedBlocks || 0) + 1;
-    }
+    this.state.incrementMissedBlocks(validatorAddress);
   }
 
   resetMissedBlocks(validatorAddress) {
-    const validators = this.state.getValidators();
-    const validator = validators.find(v => v.address === validatorAddress);
-    if (validator) {
-      validator.missedBlocks = 0;
-    }
+    this.state.resetMissedBlocks(validatorAddress);
   }
 }
 

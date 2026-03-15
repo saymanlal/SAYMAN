@@ -59,6 +59,10 @@ class StateEngine {
     this.setStake(address, Math.max(0, current - amount));
   }
 
+  stake(address, amount) {
+    this.addStake(address, amount);
+  }
+
   getTotalStake() {
     let total = 0;
     for (const stake of this.stakes.values()) {
