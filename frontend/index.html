@@ -4,17 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sayman Blockchain Network</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
   <style>
     :root {
       --mono-000: #000000;
       --mono-100: #1a1a1a;
-      --mono-200: #333333;
-      --mono-300: #4d4d4d;
       --mono-400: #666666;
-      --mono-500: #808080;
-      --mono-600: #999999;
-      --mono-700: #b3b3b3;
       --mono-800: #cccccc;
       --mono-900: #e6e6e6;
       --mono-950: #f5f5f5;
@@ -42,7 +36,6 @@
 
     h1 { font-size: 32px; font-weight: 500; letter-spacing: -0.02em; margin-bottom: calc(var(--grid) * 2); }
     h2 { font-size: 24px; font-weight: 500; letter-spacing: -0.02em; margin-bottom: calc(var(--grid) * 2); }
-    h3 { font-size: 18px; font-weight: 500; margin-bottom: calc(var(--grid) * 2); }
 
     .header {
       border-bottom: var(--border);
@@ -50,7 +43,6 @@
       margin-bottom: calc(var(--grid) * 4);
     }
 
-    .header-title { font-size: 32px; margin-bottom: calc(var(--grid) * 1); }
     .header-subtitle { color: var(--mono-400); font-size: 14px; }
 
     .header-meta {
@@ -171,66 +163,6 @@
 
     .mono { font-family: 'SF Mono', 'Consolas', monospace; font-size: 12px; }
 
-    .input-group {
-      margin-bottom: calc(var(--grid) * 3);
-    }
-
-    .input-label {
-      display: block;
-      margin-bottom: calc(var(--grid) * 1);
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--mono-400);
-    }
-
-    input, textarea {
-      width: 100%;
-      padding: calc(var(--grid) * 2);
-      border: var(--border);
-      background: var(--mono-1000);
-      font-family: inherit;
-      font-size: 14px;
-      color: var(--mono-100);
-    }
-
-    input:focus, textarea:focus {
-      outline: none;
-      border-color: var(--mono-400);
-    }
-
-    textarea {
-      min-height: 120px;
-      font-family: 'SF Mono', monospace;
-      font-size: 12px;
-    }
-
-    .btn {
-      padding: calc(var(--grid) * 2) calc(var(--grid) * 4);
-      border: var(--border);
-      background: var(--mono-1000);
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      transition: all 0.15s;
-    }
-
-    .btn:hover {
-      background: var(--mono-100);
-      color: var(--mono-1000);
-    }
-
-    .btn-primary {
-      background: var(--mono-100);
-      color: var(--mono-1000);
-    }
-
-    .btn-primary:hover {
-      background: var(--mono-200);
-    }
-
     .section {
       margin-bottom: calc(var(--grid) * 6);
     }
@@ -281,24 +213,7 @@
       color: var(--mono-400);
     }
 
-    .alert {
-      padding: calc(var(--grid) * 2);
-      border: var(--border);
-      margin-bottom: calc(var(--grid) * 2);
-      background: var(--mono-950);
-    }
-
-    .alert-success { border-color: var(--mono-100); }
-    .alert-error { border-color: var(--mono-000); background: #fff5f5; }
-
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: calc(var(--grid) * 2);
-    }
-
     @media (max-width: 768px) {
-      .grid-2 { grid-template-columns: 1fr; }
       .stats-grid { grid-template-columns: 1fr; }
       .header-meta { grid-template-columns: 1fr; }
     }
@@ -306,9 +221,8 @@
 </head>
 <body>
   <div class="container">
-    <!-- Header -->
     <header class="header">
-      <h1 class="header-title">SAYMAN BLOCKCHAIN</h1>
+      <h1>SAYMAN BLOCKCHAIN</h1>
       <p class="header-subtitle">Decentralized Network Infrastructure / Public Testnet</p>
       
       <div class="header-meta">
@@ -331,7 +245,6 @@
       </div>
     </header>
 
-    <!-- Navigation -->
     <nav class="nav">
       <ul class="nav-list">
         <li class="nav-item">
@@ -344,9 +257,6 @@
           <button class="nav-btn" onclick="showPage('validators')">Validators</button>
         </li>
         <li class="nav-item">
-          <button class="nav-btn" onclick="showPage('wallet')">Wallet</button>
-        </li>
-        <li class="nav-item">
           <button class="nav-btn" onclick="showPage('contracts')">Contracts</button>
         </li>
         <li class="nav-item">
@@ -355,7 +265,6 @@
       </ul>
     </nav>
 
-    <!-- Dashboard Page -->
     <div id="dashboard" class="page active">
       <div class="stats-grid">
         <div class="stat-card">
@@ -396,13 +305,10 @@
         <div class="section-header">
           <h2>Live Block Feed</h2>
         </div>
-        <div class="block-feed" id="block-feed">
-          <!-- Blocks will be populated here -->
-        </div>
+        <div class="block-feed" id="block-feed"></div>
       </div>
     </div>
 
-    <!-- Explorer Page -->
     <div id="explorer" class="page">
       <div class="section">
         <div class="section-header">
@@ -419,14 +325,11 @@
               <th>Time</th>
             </tr>
           </thead>
-          <tbody id="explorer-blocks">
-            <!-- Blocks will be populated here -->
-          </tbody>
+          <tbody id="explorer-blocks"></tbody>
         </table>
       </div>
     </div>
 
-    <!-- Validators Page -->
     <div id="validators" class="page">
       <div class="section">
         <div class="section-header">
@@ -441,73 +344,11 @@
               <th>Missed Blocks</th>
             </tr>
           </thead>
-          <tbody id="validator-list">
-            <!-- Validators will be populated here -->
-          </tbody>
+          <tbody id="validator-list"></tbody>
         </table>
       </div>
     </div>
 
-    <!-- Wallet Page -->
-    <div id="wallet" class="page">
-      <div class="section">
-        <div class="section-header">
-          <h2>Wallet Operations</h2>
-        </div>
-
-        <div class="grid-2">
-          <div>
-            <h3>Create Wallet</h3>
-            <button class="btn btn-primary" onclick="createWallet()">Generate New Wallet</button>
-            <div id="wallet-result"></div>
-          </div>
-
-          <div>
-            <h3>Check Balance</h3>
-            <div class="input-group">
-              <label class="input-label">Address</label>
-              <input type="text" id="balance-address" placeholder="Enter address">
-            </div>
-            <button class="btn" onclick="checkBalance()">Check Balance</button>
-            <div id="balance-result"></div>
-          </div>
-        </div>
-
-        <div class="section" style="margin-top: 48px;">
-          <h3>Send Transaction</h3>
-          <div class="input-group">
-            <label class="input-label">To Address</label>
-            <input type="text" id="send-to" placeholder="Recipient address">
-          </div>
-          <div class="input-group">
-            <label class="input-label">Amount</label>
-            <input type="number" id="send-amount" placeholder="0.00">
-          </div>
-          <div class="input-group">
-            <label class="input-label">Private Key</label>
-            <textarea id="send-key" placeholder="Your private key"></textarea>
-          </div>
-          <button class="btn btn-primary" onclick="sendTransaction()">Send Transaction</button>
-          <div id="send-result"></div>
-        </div>
-
-        <div class="section" style="margin-top: 48px;">
-          <h3>Stake</h3>
-          <div class="input-group">
-            <label class="input-label">Amount</label>
-            <input type="number" id="stake-amount" placeholder="Minimum 500 SAYM">
-          </div>
-          <div class="input-group">
-            <label class="input-label">Private Key</label>
-            <textarea id="stake-key" placeholder="Your private key"></textarea>
-          </div>
-          <button class="btn btn-primary" onclick="stakeTokens()">Stake</button>
-          <div id="stake-result"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Contracts Page -->
     <div id="contracts" class="page">
       <div class="section">
         <div class="section-header">
@@ -521,14 +362,11 @@
               <th>Code Size</th>
             </tr>
           </thead>
-          <tbody id="contract-list">
-            <!-- Contracts will be populated here -->
-          </tbody>
+          <tbody id="contract-list"></tbody>
         </table>
       </div>
     </div>
 
-    <!-- Network Page -->
     <div id="network" class="page">
       <div class="stats-grid">
         <div class="stat-card">
@@ -588,7 +426,6 @@
     </div>
   </div>
 
-  <script src="crypto-client.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

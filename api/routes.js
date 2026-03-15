@@ -1,26 +1,367 @@
 import express from 'express';
 import Transaction from '../core/transaction.js';
+import Wallet from '../wallet/wallet.js';
+import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 
-function createRouter(blockchain, p2pServer, config) {
+export function setupRoutes(app, blockchain, p2pServer, config) {
   const router = express.Router();
 
-  // Health check
-  router.get('/health', (req, res) => {
+  // Network info
+  router.get('/network', (req, res) => {
+    const stats = blockchain.getStats();
     res.json({
-      status: 'healthy',
-      blocks: blockchain.chain.length,
-      uptime: process.uptime()
+      network: config.networkName,
+      chainId: config.chainId,
+      faucetEnabled: config.faucetEnabled,
+      blockTime: config.blockTime,
+      blockReward: config.blockReward,
+      minStake: config.minStake,
+      gasLimits: stats.gasLimits,
+      gasCosts: stats.gasCosts
     });
   });
 
   // Stats
   router.get('/stats', (req, res) => {
-    const stats = blockchain.getStats();
-    res.json(stats);
+    res.json(blockchain.getStats());
   });
 
-  // Network stats
+  // Blocks with pagination
+  router.get('/blocks', (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const start = (page - 1) * limit;
+    const end = start + limit;
+    
+    const allBlocks = blockchain.chain.map(b => b.toJSON());
+    const paginatedBlocks = allBlocks.slice(start, end);
+    
+    res.json({
+      blocks: paginatedBlocks,
+      total: allBlocks.length,
+      page,
+      limit,
+      totalPages: Math.ceil(allBlocks.length / limit)
+    });
+  });
+
+  // Single block
+  router.get('/blocks/:index', (req, res) => {
+    const index = parseInt(req.params.index);
+    const block = blockchain.chain[index];
+    
+    if (!block) {
+      return res.status(404).json({ error: 'Block not found' });
+    }
+
+    res.json(block.toJSON());
+  });
+
+  // Transaction by ID
+  router.get('/transactions/:id', (req, res) => {
+    const txId = req.params.id;
+    
+    for (const block of blockchain.chain) {
+      const tx = block.transactions.find(t => t.id === txId);
+      if (tx) {
+        return res.json({
+          transaction: tx.toJSON(),
+          blockIndex: block.index,
+          blockHash: block.hash,
+          timestamp: block.timestamp
+        });
+      }
+    }
+    
+    res.status(404).json({ error: 'Transaction not found' });
+  });
+
+  // Address info with nonce
+  router.get('/address/:address', (req, res) => {
+    const { address } = req.params;
+    
+    const balance = blockchain.state.getBalance(address);
+    const stake = blockchain.state.getStake(address);
+    const unstaking = blockchain.state.isUnstaking(address);
+    const unlockBlock = blockchain.state.getUnlockBlock(address);
+    const nonce = blockchain.state.getNonce(address);
+    
+    // Get transaction history
+    const transactions = [];
+    for (const block of blockchain.chain) {
+      for (const tx of block.transactions) {
+        if (tx.data.from === address || tx.data.to === address || 
+            tx.data.validator === address || tx.data.contractAddress === address) {
+          transactions.push({
+            ...tx.toJSON(),
+            blockIndex: block.index,
+            blockHash: block.hash,
+            timestamp: block.timestamp
+          });
+        }
+      }
+    }
+    
+    const validators = blockchain.state.getValidators();
+    const validatorInfo = validators.find(v => v.address === address);
+    
+    res.json({
+      address,
+      balance,
+      stake,
+      unstaking,
+      unlockBlock,
+      nonce,
+      transactions: transactions.reverse(),
+      isValidator: !!validatorInfo,
+      validatorInfo: validatorInfo || null
+    });
+  });
+
+  // Balance (legacy)
+  router.get('/balance/:address', (req, res) => {
+    const { address } = req.params;
+    const balance = blockchain.state.getBalance(address);
+    const stake = blockchain.state.getStake(address);
+    const unstaking = blockchain.state.isUnstaking(address);
+    const unlockBlock = blockchain.state.getUnlockBlock(address);
+    const nonce = blockchain.state.getNonce(address);
+
+    res.json({
+      address,
+      balance,
+      stake,
+      unstaking,
+      unlockBlock,
+      nonce
+    });
+  });
+
+  // Validators
+  router.get('/validators', (req, res) => {
+    const validators = blockchain.state.getValidators();
+    const totalStake = blockchain.state.getTotalStake();
+    
+    const blocksPerYear = (365 * 24 * 60 * 60 * 1000) / config.blockTime;
+    const yearlyRewards = blocksPerYear * config.blockReward;
+    const estimatedAPR = totalStake > 0 ? ((yearlyRewards / totalStake) * 100).toFixed(2) : 0;
+    
+    res.json({
+      validators: validators.map(v => ({
+        ...v,
+        percentage: totalStake > 0 ? ((v.stake / totalStake) * 100).toFixed(2) : 0
+      })),
+      totalStake,
+      totalValidators: validators.length,
+      estimatedAPR
+    });
+  });
+
+  // Contracts
+  router.get('/contracts', (req, res) => {
+    res.json({
+      contracts: blockchain.state.getAllContracts()
+    });
+  });
+
+  router.get('/contracts/:address', (req, res) => {
+    const contract = blockchain.state.getContract(req.params.address);
+    
+    if (!contract) {
+      return res.status(404).json({ error: 'Contract not found' });
+    }
+
+    res.json(contract);
+  });
+
+  // Broadcast signed transaction (with gas)
+  router.post('/broadcast', (req, res) => {
+    try {
+      const { type, data, timestamp, signature, publicKey, gasLimit, gasPrice, nonce } = req.body;
+
+      if (!type || !data || !timestamp || !signature || !publicKey) {
+        return res.status(400).json({
+          error: 'Missing required fields'
+        });
+      }
+
+      if (gasLimit === undefined || gasPrice === undefined || nonce === undefined) {
+        return res.status(400).json({
+          error: 'Missing gas parameters or nonce'
+        });
+      }
+
+      const tx = new Transaction(type, data);
+      tx.timestamp = timestamp;
+      tx.signature = signature;
+      tx.id = uuidv4();
+      tx.gasLimit = gasLimit;
+      tx.gasPrice = gasPrice;
+      tx.nonce = nonce;
+
+      // Verify address matches public key
+      const derivedAddress = crypto
+        .createHash('sha256')
+        .update(publicKey)
+        .digest('hex')
+        .substring(0, 40);
+
+      if (derivedAddress !== data.from) {
+        return res.status(400).json({
+          error: 'Address does not match public key'
+        });
+      }
+
+      blockchain.state.setPublicKey(data.from, publicKey);
+
+      if (!tx.isValid(blockchain.state.publicKeys)) {
+        return res.status(400).json({
+          error: 'Invalid signature'
+        });
+      }
+
+      blockchain.addTransaction(tx, publicKey);
+
+      if (p2pServer) {
+        p2pServer.broadcastTransaction(tx);
+      }
+
+      console.log(`📨 Transaction received: ${type} from ${data.from.substring(0, 8)}... (gas: ${gasLimit} @ ${gasPrice})`);
+
+      const response = {
+        success: true,
+        txId: tx.id,
+        message: 'Transaction accepted and added to mempool',
+        gasLimit: tx.gasLimit,
+        gasPrice: tx.gasPrice,
+        maxGasCost: tx.gasLimit * tx.gasPrice
+      };
+
+      if (type === 'UNSTAKE') {
+        response.unlockBlock = blockchain.chain.length + config.unstakeDelay;
+      }
+
+      res.json(response);
+
+    } catch (error) {
+      console.error('Broadcast error:', error);
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Faucet (TESTNET ONLY)
+  router.post('/faucet', (req, res) => {
+    try {
+      if (!config.faucetEnabled) {
+        return res.status(403).json({ 
+          error: 'Faucet is disabled on mainnet',
+          message: 'Faucet is only available on testnet'
+        });
+      }
+
+      const { address } = req.body;
+
+      if (!address) {
+        return res.status(400).json({ error: 'Address required' });
+      }
+
+      const faucetBalance = blockchain.state.getBalance('faucet');
+      if (faucetBalance < config.faucetAmount) {
+        return res.status(503).json({ 
+          error: 'Faucet is empty',
+          message: 'Please try again later'
+        });
+      }
+
+      const tx = Transaction.createTransfer('faucet', address, config.faucetAmount);
+      blockchain.mempool.push(tx);
+
+      console.log(`🚰 Faucet: ${config.faucetAmount} SAYM → ${address.substring(0, 8)}...`);
+
+      res.json({
+        success: true,
+        amount: config.faucetAmount,
+        message: `${config.faucetAmount} SAYM credited (pending in mempool)`
+      });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Mempool
+  router.get('/mempool', (req, res) => {
+    res.json({
+      size: blockchain.mempool.length,
+      transactions: blockchain.mempool.map(tx => tx.toJSON())
+    });
+  });
+
+  // Search
+  router.get('/search/:query', (req, res) => {
+    const query = req.params.query.toLowerCase();
+    
+    if (!isNaN(query)) {
+      const blockIndex = parseInt(query);
+      if (blockchain.chain[blockIndex]) {
+        return res.json({
+          type: 'block',
+          result: blockchain.chain[blockIndex].toJSON()
+        });
+      }
+    }
+    
+    const blockByHash = blockchain.chain.find(b => b.hash.toLowerCase() === query);
+    if (blockByHash) {
+      return res.json({
+        type: 'block',
+        result: blockByHash.toJSON()
+      });
+    }
+    
+    for (const block of blockchain.chain) {
+      const tx = block.transactions.find(t => t.id.toLowerCase() === query);
+      if (tx) {
+        return res.json({
+          type: 'transaction',
+          result: {
+            ...tx.toJSON(),
+            blockIndex: block.index,
+            blockHash: block.hash
+          }
+        });
+      }
+    }
+    
+    const balance = blockchain.state.getBalance(query);
+    if (balance > 0 || blockchain.state.getStake(query) > 0) {
+      return res.json({
+        type: 'address',
+        result: query
+      });
+    }
+    
+    res.status(404).json({ error: 'Not found' });
+  });
+
+  // Gas estimation
+  router.post('/estimate-gas', (req, res) => {
+    try {
+      const { type, data } = req.body;
+      
+      const tempTx = new Transaction(type, data);
+      const estimatedGas = blockchain.gas.calculateTransactionGas(tempTx);
+      
+      res.json({
+        estimatedGas,
+        recommendedGasLimit: Math.ceil(estimatedGas * 1.2),
+        minGasPrice: blockchain.gas.limits.minGasPrice
+      });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
   router.get('/network/stats', (req, res) => {
     const stats = blockchain.getStats();
     const p2pStats = p2pServer ? p2pServer.getNetworkStats() : { peers: 0, peerList: [] };
@@ -50,7 +391,6 @@ function createRouter(blockchain, p2pServer, config) {
     });
   });
 
-  // Peers
   router.get('/network/peers', (req, res) => {
     if (!p2pServer) {
       return res.json({ peers: [] });
@@ -63,284 +403,5 @@ function createRouter(blockchain, p2pServer, config) {
     });
   });
 
-  // Network info
-  router.get('/network', (req, res) => {
-    res.json({
-      network: config.networkName,
-      chainId: config.chainId,
-      blockTime: config.blockTime,
-      blockReward: config.blockReward,
-      minStake: config.minStake,
-      faucetEnabled: config.faucetEnabled,
-      faucetAmount: config.faucetAmount,
-      gasLimits: config.gasLimits,
-      gasCosts: config.gasCosts
-    });
-  });
-
-  // Balance
-  router.get('/balance/:address', (req, res) => {
-    try {
-      const { address } = req.params;
-      const balance = blockchain.state.getBalance(address);
-      const stake = blockchain.state.getStake(address);
-      const nonce = blockchain.state.getNonce(address);
-      
-      res.json({
-        address,
-        balance,
-        stake,
-        nonce
-      });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Address detailed info
-  router.get('/address/:address', (req, res) => {
-    try {
-      const { address } = req.params;
-      const balance = blockchain.state.getBalance(address);
-      const stake = blockchain.state.getStake(address);
-      const nonce = blockchain.state.getNonce(address);
-      
-      const transactions = [];
-      for (const block of blockchain.chain) {
-        for (const tx of block.transactions) {
-          if (tx.data && (tx.data.from === address || tx.data.to === address)) {
-            transactions.push({
-              ...tx.toJSON(),
-              blockIndex: block.index,
-              timestamp: block.timestamp
-            });
-          }
-        }
-      }
-      
-      res.json({
-        address,
-        balance,
-        stake,
-        nonce,
-        transactions: transactions.slice(-20)
-      });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Blocks (paginated)
-  router.get('/blocks', (req, res) => {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const start = (page - 1) * limit;
-    const end = start + limit;
-    
-    const blocks = blockchain.chain
-      .slice()
-      .reverse()
-      .slice(start, end)
-      .map(b => b.toJSON());
-    
-    res.json({
-      blocks,
-      total: blockchain.chain.length,
-      page,
-      limit
-    });
-  });
-
-  // Single block
-  router.get('/blocks/:index', (req, res) => {
-    const index = parseInt(req.params.index);
-    const block = blockchain.chain[index];
-    
-    if (!block) {
-      return res.status(404).json({ error: 'Block not found' });
-    }
-    
-    res.json(block.toJSON());
-  });
-
-  // Validators
-  router.get('/validators', (req, res) => {
-    const validators = blockchain.pos.getAllValidators();
-    const totalStake = blockchain.pos.getTotalStake();
-    
-    const validatorList = validators.map(v => ({
-      address: v.address,
-      stake: v.stake,
-      percentage: totalStake > 0 ? ((v.stake / totalStake) * 100).toFixed(2) : 0,
-      missedBlocks: v.missedBlocks
-    }));
-    
-    const estimatedAPR = totalStake > 0 
-      ? ((config.blockReward * 365 * 24 * 60 * 12) / totalStake * 100).toFixed(2)
-      : 0;
-    
-    res.json({
-      validators: validatorList,
-      totalValidators: validators.length,
-      totalStake,
-      estimatedAPR: parseFloat(estimatedAPR)
-    });
-  });
-
-  // Mempool
-  router.get('/mempool', (req, res) => {
-    res.json({
-      size: blockchain.mempool.length,
-      transactions: blockchain.mempool.map(tx => tx.toJSON())
-    });
-  });
-
-  // Contracts
-  router.get('/contracts', (req, res) => {
-    const contracts = [];
-    for (const [address, contract] of blockchain.contracts.contracts) {
-      contracts.push({
-        address,
-        owner: contract.owner,
-        codeSize: contract.code.length
-      });
-    }
-    
-    res.json({ contracts });
-  });
-
-  // Faucet
-  router.post('/faucet', (req, res) => {
-    if (!config.faucetEnabled) {
-      return res.status(403).json({ 
-        error: 'Faucet is disabled on this network' 
-      });
-    }
-    
-    const { address } = req.body;
-    
-    if (!address || address.length !== 40) {
-      return res.status(400).json({ error: 'Invalid address' });
-    }
-    
-    // Simple faucet implementation
-    const faucetAddress = Object.keys(config.genesisAllocations || {})[0];
-    
-    if (!faucetAddress) {
-      return res.status(503).json({ error: 'Faucet not configured' });
-    }
-    
-    const balance = blockchain.state.getBalance(faucetAddress);
-    
-    if (balance < config.faucetAmount) {
-      return res.status(503).json({ error: 'Faucet is empty' });
-    }
-    
-    res.json({
-      success: true,
-      message: 'Use the standalone faucet service',
-      faucetUrl: 'https://sayman-faucet.onrender.com'
-    });
-  });
-
-  // Gas estimation
-  router.post('/estimate-gas', (req, res) => {
-    try {
-      const { type, data } = req.body;
-      const estimatedGas = blockchain.gasCalculator.calculateGas(type, data);
-      const recommendedGasLimit = Math.ceil(estimatedGas * 1.2);
-      
-      res.json({
-        estimatedGas,
-        recommendedGasLimit,
-        minGasPrice: config.gasLimits.minGasPrice
-      });
-    } catch (error) {
-      res.status(400).json({ error: error.message });
-    }
-  });
-
-  // Broadcast transaction
-  router.post('/broadcast', (req, res) => {
-    try {
-      const { type, data, timestamp, signature, publicKey, gasLimit, gasPrice, nonce } = req.body;
-      
-      // Derive address from public key
-      const derivedAddress = crypto
-        .createHash('sha256')
-        .update(publicKey)
-        .digest('hex')
-        .substring(0, 40);
-      
-      // Verify address matches
-      if (data.from && derivedAddress !== data.from) {
-        return res.status(400).json({ 
-          error: 'Address does not match public key' 
-        });
-      }
-      
-      // Store public key
-      blockchain.state.setPublicKey(derivedAddress, publicKey);
-      
-      // Create transaction
-      const tx = new Transaction({
-        type,
-        data,
-        timestamp,
-        gasLimit,
-        gasPrice,
-        nonce,
-        signature
-      });
-      
-      // Validate transaction
-      if (!tx.isValid(blockchain.state.publicKeys)) {
-        return res.status(400).json({ error: 'Invalid signature' });
-      }
-      
-      // Validate nonce
-      const expectedNonce = blockchain.state.getNonce(data.from || derivedAddress);
-      if (nonce !== expectedNonce) {
-        return res.status(400).json({ 
-          error: `Invalid nonce. Expected: ${expectedNonce}, Got: ${nonce}` 
-        });
-      }
-      
-      // Check balance
-      const address = data.from || derivedAddress;
-      const balance = blockchain.state.getBalance(address);
-      const maxGasCost = gasLimit * gasPrice;
-      const totalCost = (data.amount || 0) + maxGasCost;
-      
-      if (balance < totalCost) {
-        return res.status(400).json({ 
-          error: `Insufficient balance. Required: ${totalCost}, Available: ${balance}` 
-        });
-      }
-      
-      // Add to mempool
-      blockchain.mempool.push(tx);
-      
-      // Broadcast to peers
-      if (p2pServer) {
-        p2pServer.broadcastTransaction(tx);
-      }
-      
-      res.json({
-        success: true,
-        txId: tx.id,
-        gasLimit,
-        gasPrice,
-        maxGasCost
-      });
-      
-    } catch (error) {
-      console.error('Broadcast error:', error);
-      res.status(400).json({ error: error.message });
-    }
-  });
-
-  return router;
+  app.use('/api', router);
 }
-
-export default createRouter;
