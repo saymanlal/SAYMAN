@@ -70,6 +70,16 @@ async function startServer() {
 
     setupRoutes(app, blockchain, p2pServer, blockchain.config);
 
+    // CRITICAL: Health check for Render deployment
+    app.get('/health', (req, res) => {
+      res.status(200).json({ 
+        status: 'ok', 
+        timestamp: Date.now(),
+        network: blockchain.networkName,
+        blocks: blockchain.chain.length
+      });
+    });
+
     const PORT = config.apiPort;
     
     server = app.listen(PORT, '0.0.0.0', () => {
