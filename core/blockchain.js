@@ -81,6 +81,10 @@ class Blockchain {
     const faucetAddress = crypto.createHash('sha256').update(faucetPubKey).digest('hex').substring(0, 40);
     
     console.log(`🚰 Genesis Faucet Address: ${faucetAddress}`);
+  
+    // CRITICAL: Register faucet public key in state
+    this.state.setPublicKey(faucetAddress, faucetPubKey);
+    console.log(`✓ Faucet public key registered`);
     
     Object.entries(allocations).forEach(([key, amount]) => {
       let address;
