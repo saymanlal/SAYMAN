@@ -32,8 +32,20 @@ class FaucetWallet {
 
   async signTransaction(txData) {
     const keyPair = ec.keyFromPrivate(this.privateKey);
-    const dataString = JSON.stringify(txData);
-    const hash = crypto.createHash('sha256').update(dataString).digest('hex');
+    
+    // CRITICAL: Must match Transaction.calculateHash() exactly!
+    const dataToHash = JSON.stringify({
+      type: txData.type,
+      timestamp: txData.timestamp,
+      data: txData.data,
+      gasLimit: txData.gasLimit,
+      gasPrice: txData.gasPrice,
+      nonce: txData.nonce
+    });
+    
+    const hash = crypto.createHash('sha256').update(dataToHash).digest('hex');
+    console.log(`🔐 Signing hash: ${hash}`);
+    
     const signature = keyPair.sign(hash);
     return signature.toDER('hex');
   }
@@ -107,23 +119,30 @@ app.post('/faucet', async (req, res) => {
     console.log(`⛽ Gas estimate: ${gasData.estimatedGas}`);
     
     // Create transaction data
-    const txData = {
-      type: 'TRANSFER',
-      data: { 
-        from: faucetWallet.address, 
-        to: address, 
-        amount: FAUCET_AMOUNT 
-      },
-      timestamp: Date.now(),
-      gasLimit: gasData.recommendedGasLimit || 50000,
-      gasPrice: gasData.minGasPrice || 1,
-      nonce: nonce
-    };
-    
-    console.log(`📝 Transaction data:`, JSON.stringify(txData, null, 2));
-    
-    // Sign transaction
-    const signature = await faucetWallet.signTransaction(txData);
+   const txData = {
+    type: 'TRANSFER',
+    data: { 
+      from: faucetWallet.address, 
+      to: address, 
+      amount: FAUCET_AMOUNT 
+    },
+    timestamp: Date.now(),
+    gasLimit: gasData.recommendedGasLimit || 50000,
+    gasPrice: gasData.minGasPrice || 1,
+    nonce: nonce
+  };
+  
+  console.log(`📝 Transaction data:`, JSON.stringify(txData, null, 2));
+  
+  // CRITICAL: Calculate the exact hash that will be signed
+  const hashForSigning = crypto.createHash('sha256')
+    .update(JSON.stringify(txData))
+    .digest('hex');
+  
+  console.log(`🔐 Hash being signed: ${hashForSigning}`);
+  
+  // Sign transaction
+  const signature = await faucetWallet.signTransaction(txData);
     
     console.log(`✍️  Signature: ${signature.substring(0, 20)}...`);
     
