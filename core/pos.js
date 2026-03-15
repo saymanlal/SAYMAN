@@ -4,7 +4,17 @@ class ProofOfStake {
   constructor(state, config) {
     this.state = state;
     this.config = config;
+    this.validators = new Map();
     this.lastValidator = null;
+  }
+
+  addValidator(address, stake) {
+    this.validators.set(address, {
+      address,
+      stake,
+      missedBlocks: 0,
+      totalRewards: 0
+    });
   }
 
   selectValidator(lastBlockHash) {
@@ -20,7 +30,10 @@ class ProofOfStake {
 
     const totalStake = this.state.getTotalStake();
     
-    // Deterministic random selection based on last block hash
+    if (totalStake === 0) {
+      return null;
+    }
+
     const seed = crypto
       .createHash('sha256')
       .update(lastBlockHash)
@@ -56,6 +69,22 @@ class ProofOfStake {
     }
 
     return slashTransactions;
+  }
+
+  incrementMissedBlocks(validatorAddress) {
+    const validators = this.state.getValidators();
+    const validator = validators.find(v => v.address === validatorAddress);
+    if (validator) {
+      validator.missedBlocks = (validator.missedBlocks || 0) + 1;
+    }
+  }
+
+  resetMissedBlocks(validatorAddress) {
+    const validators = this.state.getValidators();
+    const validator = validators.find(v => v.address === validatorAddress);
+    if (validator) {
+      validator.missedBlocks = 0;
+    }
   }
 }
 
