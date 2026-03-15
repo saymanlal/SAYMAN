@@ -4,7 +4,7 @@ import Wallet from '../wallet/wallet.js';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 
-function createRouter(blockchain, p2pServer, config) {
+export function setupRoutes(app, blockchain, p2pServer, config) {
   const router = express.Router();
 
   // Network info
@@ -354,23 +354,23 @@ function createRouter(blockchain, p2pServer, config) {
       
       res.json({
         estimatedGas,
-        recommendedGasLimit: Math.ceil(estimatedGas * 1.2), // 20% buffer
+        recommendedGasLimit: Math.ceil(estimatedGas * 1.2),
         minGasPrice: blockchain.gas.limits.minGasPrice
       });
     } catch (error) {
       res.status(400).json({ error: error.message });
     }
   });
+
   router.get('/network/stats', (req, res) => {
     const stats = blockchain.getStats();
     const p2pStats = p2pServer ? p2pServer.getNetworkStats() : { peers: 0, peerList: [] };
     
-    // Calculate average block time
     let avgBlockTime = config.blockTime;
     if (blockchain.chain.length > 10) {
       const recent = blockchain.chain.slice(-10);
       const timeDiff = recent[recent.length - 1].timestamp - recent[0].timestamp;
-      avgBlockTime = timeDiff / 9; // 9 intervals between 10 blocks
+      avgBlockTime = timeDiff / 9;
     }
     
     res.json({
@@ -391,7 +391,6 @@ function createRouter(blockchain, p2pServer, config) {
     });
   });
 
-  // Peer information (NEW)
   router.get('/network/peers', (req, res) => {
     if (!p2pServer) {
       return res.json({ peers: [] });
@@ -404,7 +403,5 @@ function createRouter(blockchain, p2pServer, config) {
     });
   });
 
-  return router;
+  app.use('/api', router);
 }
-
-export default createRouter;

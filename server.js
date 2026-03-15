@@ -68,7 +68,7 @@ async function startServer() {
 
     p2pServer = new P2PServer(blockchain, config.p2pPort);
 
-    setupRoutes(app, blockchain, p2pServer);
+    setupRoutes(app, blockchain, p2pServer, blockchain.config);
 
     const PORT = config.apiPort;
     
